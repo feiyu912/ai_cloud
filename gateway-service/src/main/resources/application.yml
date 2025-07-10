@@ -1,0 +1,18 @@
+server:
+  port: 8008
+spring:
+  application:
+    name: gateway-service
+  cloud:
+    nacos:
+      server-addr: 127.0.0.1:8848
+      discovery:
+        ip: 127.0.0.1
+    gateway:
+      routes:
+        - id: ai-service
+          uri: lb://ai-service
+          predicates:
+            - Path=/ai/**
+          filters:
+            - StripPrefix=1 

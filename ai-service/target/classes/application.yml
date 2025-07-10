@@ -1,0 +1,70 @@
+server:
+  port: 8081
+
+spring:
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+  application:
+    name: ai-service
+
+  profiles:
+    active: dev,private
+  # Redis配置已移除，使用RAGFlow远程服务
+  datasource:
+    url: jdbc:mysql://localhost:3306/knowledge_base
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  ai:
+    dash-scope:
+      api-key: sk-a75e2109f45e4704b3c14cb25e245186
+      chat:
+        options:
+          incremental-output: false
+          model: qwen-max
+      embedding:
+        options:
+          model: text-embedding-v2
+      image:
+        options:
+          model: wanx-v1
+    # 向量存储配置已移除，使用RAGFlow远程服务
+
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+        ip: 127.0.0.1
+      config:
+        import-check:
+          enabled: false
+
+
+    sentinel:
+      transport:
+        dashboard: localhost:8080
+      eager: true
+
+    gateway:
+      routes:
+        - id: ai-service
+          uri: lb://ai-service
+          predicates:
+            - Path=/ai/**
+          filters:
+            - StripPrefix=1
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+# RAGFlow配置
+ragflow:
+  base-url: http://192.168.100.128:80
+  api-key: ${RAGFLOW_API_KEY:}  # 从环境变量获取API Key，如果没有则使用空字符串
+
+# 知识库功能已完全迁移到RAGFlow远程服务
+
