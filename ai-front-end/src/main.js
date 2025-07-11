@@ -7,13 +7,16 @@ import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 
 import ChatPage from './pages/ChatPage.vue'
-import KnowledgeBasePage from './pages/KnowledgeBasePage.vue'
+import KnowledgeBaseListPage from './pages/KnowledgeBaseListPage.vue'
+import KnowledgeBaseDetailPage from './pages/KnowledgeBaseDetailPage.vue'
 import LoginPage from './pages/LoginPage.vue'
 import RegisterPage from './pages/RegisterPage.vue'
 
 const routes = [
   { path: '/', component: ChatPage, name: 'Chat', meta: { requiresAuth: true } },
-  { path: '/knowledge-base', component: KnowledgeBasePage, name: 'KnowledgeBase', meta: { requiresAuth: true } },
+  { path: '/kb', component: KnowledgeBaseListPage, name: 'KnowledgeBaseList', meta: { requiresAuth: true } },
+  { path: '/kb/:datasetId', component: KnowledgeBaseDetailPage, name: 'KnowledgeBaseDetail', meta: { requiresAuth: true } },
+  { path: '/knowledge-base', redirect: '/kb' },
   { path: '/login', component: LoginPage, name: 'Login' },
   { path: '/register', component: RegisterPage, name: 'Register' },
   { path: '/:pathMatch(.*)*', redirect: '/' },
