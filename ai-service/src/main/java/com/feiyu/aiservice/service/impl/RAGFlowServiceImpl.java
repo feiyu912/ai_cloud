@@ -174,25 +174,16 @@ public class RAGFlowServiceImpl implements RAGFlowService {
     /**
      * 创建数据集
      */
-    public Map<String, Object> createDataset(String name, String description) {
+    public Map<String, Object> createDataset(Map<String, Object> request) {
         try {
-            String url = ragflowBaseUrl + "/v1/datasets";
-            Map<String, Object> request = new HashMap<>();
-            request.put("name", name);
-            request.put("description", description);
-            request.put("embedding_model", "BAAI/bge-large-zh-v1.5@BAAI");
-            request.put("chunk_method", "naive");
-            request.put("permission", "me");
-
+            String url = ragflowBaseUrl + "/api/v1/datasets";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             if (ragflowApiKey != null && !ragflowApiKey.isEmpty()) {
                 headers.set("Authorization", "Bearer " + ragflowApiKey);
             }
-
             HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, headers);
             ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.POST, requestEntity, Map.class);
-
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
                 Map<String, Object> body = response.getBody();
                 if (body.containsKey("data")) {

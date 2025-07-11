@@ -33,15 +33,13 @@ public class RAGFlowController {
      * 创建数据集
      */
     @PostMapping("/datasets")
-    public ResponseEntity<Map<String, Object>> createDataset(@RequestBody Map<String, String> request) {
-        String name = request.get("name");
-        String description = request.get("description");
-        
-        if (name == null || name.trim().isEmpty()) {
+    public ResponseEntity<Map<String, Object>> createDataset(@RequestBody Map<String, Object> request) {
+        if (!request.containsKey("name") || request.get("name") == null || request.get("name").toString().trim().isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "数据集名称不能为空"));
         }
-        
-        Map<String, Object> dataset = ragFlowService.createDataset(name, description);
+        // 只传name字段
+        Map<String, Object> onlyName = Map.of("name", request.get("name"));
+        Map<String, Object> dataset = ragFlowService.createDataset(onlyName);
         if (dataset != null) {
             return ResponseEntity.ok(Map.of("success", true, "data", dataset));
         } else {

@@ -36,7 +36,7 @@ public interface RAGFlowService {
      * @param description 数据集描述
      * @return 创建的数据集信息
      */
-    Map<String, Object> createDataset(String name, String description);
+    Map<String, Object> createDataset(Map<String, Object> request);
     
     /**
      * 获取数据集列表
