@@ -33,7 +33,7 @@ async function onLogin() {
     ElMessage.warning('请输入用户名和密码')
     return
   }
-  const res = await fetch('/ai/api/auth/login', {
+  const res = await fetch('/ai/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username: username.value, password: password.value })

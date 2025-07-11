@@ -156,7 +156,7 @@ onMounted(() => {
 
 async function loadDatasets() {
   try {
-    const res = await fetch('/ai/api/ragflow/datasets')
+    const res = await fetch('/ai/ragflow/datasets')
     const data = await res.json()
     if (data.success) {
       datasets.value = data.data || []
@@ -175,7 +175,7 @@ async function searchKb() {
   searched.value = true
   results.value = []
   try {
-    const res = await fetch('/ai/api/ragflow/search', {
+    const res = await fetch('/ai/ragflow/search', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -206,7 +206,7 @@ function onFileChange(file) {
 // 检查RAGFlow健康状态
 async function checkRAGFlowHealth() {
   try {
-    const res = await fetch('/ai/api/ragflow/health')
+    const res = await fetch('/ai/ragflow/health')
     const data = await res.json()
     if (data.healthy) {
       ElMessage.success('RAGFlow服务正常')
@@ -235,7 +235,7 @@ async function handleUpload() {
     formData.append('file', selectedFile.value)
     formData.append('datasetId', uploadForm.value.datasetId)
     
-    const res = await fetch('/ai/api/chat/session/1/upload', {
+    const res = await fetch('/ai/chat/session/1/upload', {
       method: 'POST',
       body: formData
     })
@@ -271,7 +271,7 @@ async function createDataset() {
   
   creatingDataset.value = true
   try {
-    const res = await fetch('/ai/api/ragflow/datasets', {
+    const res = await fetch('/ai/ragflow/datasets', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

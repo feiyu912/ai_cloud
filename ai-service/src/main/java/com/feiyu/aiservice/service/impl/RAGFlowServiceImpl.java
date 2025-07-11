@@ -32,8 +32,8 @@ public class RAGFlowServiceImpl implements RAGFlowService {
     @Override
     public List<Map<String, Object>> queryKnowledge(String question) {
         try {
-            // 使用官方API: POST /api/v1/retrieval
-            String url = ragflowBaseUrl + "/api/v1/retrieval";
+            // 使用官方API: POST /v1/retrieval
+            String url = ragflowBaseUrl + "/v1/retrieval";
             Map<String, Object> request = new HashMap<>();
             request.put("question", question);
             request.put("top_k", 5);
@@ -86,8 +86,8 @@ public class RAGFlowServiceImpl implements RAGFlowService {
     @Override
     public String uploadDocument(MultipartFile file, String datasetId, String authorization, String cookie) {
         try {
-            // 使用官方API: POST /api/v1/datasets/{dataset_id}/documents
-            String uploadUrl = ragflowBaseUrl + "/api/v1/datasets/" + datasetId + "/documents";
+            // 使用官方API: POST /v1/datasets/{dataset_id}/documents
+            String uploadUrl = ragflowBaseUrl + "/v1/datasets/" + datasetId + "/documents";
             
             HttpHeaders uploadHeaders = new HttpHeaders();
             uploadHeaders.setContentType(MediaType.MULTIPART_FORM_DATA);
@@ -125,8 +125,8 @@ public class RAGFlowServiceImpl implements RAGFlowService {
                 if (!documents.isEmpty()) {
                     String documentId = (String) documents.get(0).get("id");
                     
-                    // 使用官方API: POST /api/v1/datasets/{dataset_id}/chunks 来解析文档
-                    String parseUrl = ragflowBaseUrl + "/api/v1/datasets/" + datasetId + "/chunks";
+                    // 使用官方API: POST /v1/datasets/{dataset_id}/chunks 来解析文档
+                    String parseUrl = ragflowBaseUrl + "/v1/datasets/" + datasetId + "/chunks";
                     HttpHeaders parseHeaders = new HttpHeaders();
                     parseHeaders.setContentType(MediaType.APPLICATION_JSON);
                     
@@ -161,7 +161,7 @@ public class RAGFlowServiceImpl implements RAGFlowService {
     public boolean healthCheck() {
         try {
             // 使用数据集列表API作为健康检查
-            String url = ragflowBaseUrl + "/api/v1/datasets?page=1&page_size=1";
+            String url = ragflowBaseUrl + "/v1/datasets?page=1&page_size=1";
             HttpHeaders headers = new HttpHeaders();
             if (ragflowApiKey != null && !ragflowApiKey.isEmpty()) {
                 headers.set("Authorization", "Bearer " + ragflowApiKey);
@@ -181,7 +181,7 @@ public class RAGFlowServiceImpl implements RAGFlowService {
      */
     public Map<String, Object> createDataset(String name, String description) {
         try {
-            String url = ragflowBaseUrl + "/api/v1/datasets";
+            String url = ragflowBaseUrl + "/v1/datasets";
             Map<String, Object> request = new HashMap<>();
             request.put("name", name);
             request.put("description", description);
@@ -212,20 +212,19 @@ public class RAGFlowServiceImpl implements RAGFlowService {
     }
     
     /**
-     * 获取数据集列表
+     * 获取数据集（知识库）列表
      */
     public List<Map<String, Object>> listDatasets() {
+        System.out.println("当前ragflowApiKey: [" + ragflowApiKey + "]");
         try {
             String url = ragflowBaseUrl + "/api/v1/datasets?page=1&page_size=100";
             HttpHeaders headers = new HttpHeaders();
-            if (ragflowApiKey != null && !ragflowApiKey.isEmpty()) {
-                headers.set("Authorization", "Bearer " + ragflowApiKey);
-            }
-            
+            headers.set("Authorization", "Bearer " + ragflowApiKey);
             HttpEntity<String> request = new HttpEntity<>(headers);
             ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, request, Map.class);
 
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                System.out.println("ragflow原始返回: " + response.getBody());
                 Map<String, Object> body = response.getBody();
                 if (body.containsKey("data")) {
                     return (List<Map<String, Object>>) body.get("data");

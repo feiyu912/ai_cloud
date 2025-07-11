@@ -64,7 +64,7 @@ mybatis-plus:
 # RAGFlow配置
 ragflow:
   base-url: http://192.168.100.128:80
-  api-key: ${RAGFLOW_API_KEY:}  # 从环境变量获取API Key，如果没有则使用空字符串
+  api-key: ragflow-JlMTExYzk0NWQ1NzExZjBiNzI0MDI0Mm # 从环境变量获取API Key，如果没有则使用空字符串
 
 # 知识库功能已完全迁移到RAGFlow远程服务
 

@@ -66,7 +66,7 @@ onMounted(() => {
 
 async function loadDatasets() {
   try {
-    const res = await fetch('/ai/api/ragflow/datasets')
+    const res = await fetch('/ai/ragflow/datasets')
     const data = await res.json()
     if (data.success) {
       datasets.value = data.data || []
@@ -100,7 +100,7 @@ async function handleUpload() {
     formData.append('file', selectedFile.value)
     formData.append('datasetId', uploadForm.value.datasetId)
     
-    const res = await fetch('/ai/api/chat/session/1/upload', {
+    const res = await fetch('/ai/chat/session/1/upload', {
       method: 'POST',
       body: formData
     })

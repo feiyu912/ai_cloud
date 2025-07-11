@@ -212,7 +212,7 @@ function formatTime(time) {
 
 async function fetchSessions() {
   const token = localStorage.getItem('token')
-  const res = await fetch('/ai/api/chat/sessions', { headers: { Authorization: token } })
+  const res = await fetch('/ai/chat/sessions', { headers: { Authorization: token } })
   sessions.value = await res.json()
   if (sessions.value.length && !currentSessionId.value) {
     switchSession(sessions.value[0].id)
@@ -226,7 +226,7 @@ async function switchSession(id) {
 
 async function fetchMessages() {
   const token = localStorage.getItem('token')
-  const res = await fetch(`/ai/api/chat/session/${currentSessionId.value}`, { headers: { Authorization: token } })
+  const res = await fetch(`/ai/chat/session/${currentSessionId.value}`, { headers: { Authorization: token } })
   const rawMsgs = await res.json()
   // 解析 reference 字段
   messages.value = rawMsgs.map(msg => {
@@ -243,7 +243,7 @@ async function fetchMessages() {
 
 async function createSession() {
   const token = localStorage.getItem('token')
-  const res = await fetch('/ai/api/chat/session', {
+  const res = await fetch('/ai/chat/session', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: token },
     body: JSON.stringify({ title: '新会话' })
@@ -274,14 +274,14 @@ async function sendMessage() {
   try {
     // 1. 先保存用户消息到数据库
     const token = localStorage.getItem('token')
-    await fetch(`/ai/api/chat/session/${currentSessionId.value}/message`, {
+    await fetch(`/ai/chat/session/${currentSessionId.value}/message`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: token },
       body: JSON.stringify({ role: 'user', content: prompt })
     })
 
     // 2. 先获取AI参考内容
-    const refRes = await fetch(`/ai/api/chat/session/${currentSessionId.value}/search`, {
+    const refRes = await fetch(`/ai/chat/session/${currentSessionId.value}/search`, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: prompt
@@ -301,7 +301,7 @@ async function sendMessage() {
       tools: selectedTools.value
     }
     console.log('请求体:', requestBody)
-    const res = await fetch(`/ai/api/chat/session/${currentSessionId.value}/chat`, {
+    const res = await fetch(`/ai/chat/session/${currentSessionId.value}/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -364,7 +364,7 @@ async function handleUpload() {
     console.log('token:', token)
     console.log('sessionId:', currentSessionId.value)
     console.log('file:', selectedFile.value)
-    const res = await axios.post(`/ai/api/chat/session/${currentSessionId.value}/upload`, formData, {
+    const res = await axios.post(`/ai/chat/session/${currentSessionId.value}/upload`, formData, {
       headers: {
         Authorization: token
       }
@@ -402,7 +402,7 @@ async function saveSessionTitle(session) {
     return
   }
   const token = localStorage.getItem('token')
-  const res = await fetch(`/ai/api/chat/session/${session.id}/rename`, {
+  const res = await fetch(`/ai/chat/session/${session.id}/rename`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: token },
     body: JSON.stringify({ title: editSessionTitle.value })
@@ -420,7 +420,7 @@ async function saveSessionTitle(session) {
 
 async function deleteSession(id) {
   const token = localStorage.getItem('token')
-  const res = await fetch(`/ai/api/chat/session/${id}`, {
+  const res = await fetch(`/ai/chat/session/${id}`, {
     method: 'DELETE',
     headers: { Authorization: token }
   })
@@ -449,7 +449,7 @@ onMounted(() => {
 
 async function fetchMcpTools() {
   try {
-    const res = await fetch('/ai/api/mcp/tools');
+    const res = await fetch('/ai/mcp/tools');
     const allTools = await res.json();
     // 只保留本地工具
     mcpTools.value = allTools.filter(tool => [
