@@ -100,4 +100,28 @@ public class RAGFlowController {
         List<Map<String, Object>> docs = ragFlowService.listDocuments(datasetId, page, pageSize, keywords);
         return ResponseEntity.ok(Map.of("success", true, "data", Map.of("docs", docs)));
     }
+
+    /**
+     * 下载指定文档
+     */
+    @GetMapping("/datasets/{datasetId}/documents/{documentId}")
+    public ResponseEntity<byte[]> downloadDocument(@PathVariable String datasetId, @PathVariable String documentId) {
+        return ragFlowService.downloadDocument(datasetId, documentId);
+    }
+
+    /**
+     * 删除指定文档
+     */
+    @DeleteMapping("/datasets/{datasetId}/documents")
+    public ResponseEntity<Map<String, Object>> deleteDocuments(
+            @PathVariable String datasetId,
+            @RequestBody Map<String, List<String>> request) {
+        List<String> ids = request.get("ids");
+        boolean success = ragFlowService.deleteDocuments(datasetId, ids);
+        if (success) {
+            return ResponseEntity.ok(Map.of("success", true));
+        } else {
+            return ResponseEntity.status(500).body(Map.of("success", false, "error", "删除失败"));
+        }
+    }
 } 

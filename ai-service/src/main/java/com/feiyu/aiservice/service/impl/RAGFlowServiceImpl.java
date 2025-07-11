@@ -260,4 +260,41 @@ public class RAGFlowServiceImpl implements RAGFlowService {
             return Collections.emptyList();
         }
     }
+
+    @Override
+    public ResponseEntity<byte[]> downloadDocument(String datasetId, String documentId) {
+        try {
+            String url = ragflowBaseUrl + "/api/v1/datasets/" + datasetId + "/documents/" + documentId;
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Authorization", "Bearer " + ragflowApiKey);
+            HttpEntity<String> request = new HttpEntity<>(headers);
+            ResponseEntity<byte[]> response = restTemplate.exchange(url, HttpMethod.GET, request, byte[].class);
+            return response;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(null);
+        }
+    }
+
+    @Override
+    public boolean deleteDocuments(String datasetId, List<String> documentIds) {
+        try {
+            String url = ragflowBaseUrl + "/api/v1/datasets/" + datasetId + "/documents";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Authorization", "Bearer " + ragflowApiKey);
+            Map<String, Object> body = new HashMap<>();
+            body.put("ids", documentIds);
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.DELETE, request, Map.class);
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                Object code = response.getBody().get("code");
+                return code != null && code.toString().equals("0");
+            }
+            return false;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
 } 

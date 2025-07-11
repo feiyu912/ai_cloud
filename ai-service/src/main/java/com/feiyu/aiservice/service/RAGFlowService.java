@@ -4,6 +4,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
+import org.springframework.http.ResponseEntity;
 
 public interface RAGFlowService {
     /**
@@ -47,4 +48,14 @@ public interface RAGFlowService {
      * 获取指定数据集下的文档列表
      */
     List<Map<String, Object>> listDocuments(String datasetId, Integer page, Integer pageSize, String keywords);
+
+    /**
+     * 下载指定文档
+     */
+    ResponseEntity<byte[]> downloadDocument(String datasetId, String documentId);
+
+    /**
+     * 删除指定文档
+     */
+    boolean deleteDocuments(String datasetId, List<String> documentIds);
 } 
