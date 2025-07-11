@@ -15,6 +15,7 @@
           <div class="kb-dataset-stats">
             <el-tag size="small">文档: {{ dataset.document_count || 0 }}</el-tag>
             <el-tag size="small" type="success">片段: {{ dataset.chunk_count || 0 }}</el-tag>
+            <el-button size="small" type="danger" @click.stop="deleteDataset(dataset.id)">删除</el-button>
           </div>
         </div>
       </el-card>
@@ -66,7 +67,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -128,6 +129,39 @@ async function createDataset() {
     ElMessage.error('创建失败')
   } finally {
     creatingDataset.value = false
+  }
+}
+
+async function deleteDataset(id) {
+  try {
+    await ElMessageBox.confirm('确定要删除该知识库吗？此操作不可恢复。', '删除确认', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    const token = localStorage.getItem('access_token')
+    const headers = {
+      'Content-Type': 'application/json'
+    }
+    if (token) {
+      headers['Authorization'] = 'Bearer ' + token
+    }
+    const res = await fetch('/ai/ragflow/datasets', {
+      method: 'DELETE',
+      headers,
+      body: JSON.stringify({ ids: [id] })
+    })
+    const data = await res.json()
+    if (data.success || data.code === 0) {
+      ElMessage.success('删除成功')
+      loadDatasets()
+    } else {
+      ElMessage.error(data.message || '删除失败')
+    }
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error('删除失败')
+    }
   }
 }
 </script>

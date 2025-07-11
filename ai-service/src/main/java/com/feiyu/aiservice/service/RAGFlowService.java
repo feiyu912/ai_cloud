@@ -58,4 +58,9 @@ public interface RAGFlowService {
      * 删除指定文档
      */
     boolean deleteDocuments(String datasetId, List<String> documentIds);
+
+    /**
+     * 删除知识库（数据集）
+     */
+    boolean deleteDatasets(Object ids);
 } 

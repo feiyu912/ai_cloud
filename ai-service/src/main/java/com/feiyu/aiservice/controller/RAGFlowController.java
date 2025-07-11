@@ -122,4 +122,18 @@ public class RAGFlowController {
             return ResponseEntity.status(500).body(Map.of("success", false, "error", "删除失败"));
         }
     }
+
+    /**
+     * 删除知识库（数据集）
+     */
+    @DeleteMapping("/datasets")
+    public ResponseEntity<Map<String, Object>> deleteDatasets(@RequestBody Map<String, Object> request) {
+        Object ids = request.get("ids");
+        boolean success = ragFlowService.deleteDatasets(ids);
+        if (success) {
+            return ResponseEntity.ok(Map.of("success", true));
+        } else {
+            return ResponseEntity.status(500).body(Map.of("success", false, "error", "删除知识库失败"));
+        }
+    }
 } 

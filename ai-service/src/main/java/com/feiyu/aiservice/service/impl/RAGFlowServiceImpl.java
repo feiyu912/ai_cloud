@@ -288,4 +288,26 @@ public class RAGFlowServiceImpl implements RAGFlowService {
             return false;
         }
     }
+
+    @Override
+    public boolean deleteDatasets(Object ids) {
+        try {
+            String url = ragflowBaseUrl + "/api/v1/datasets";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Authorization", "Bearer " + ragflowApiKey);
+            Map<String, Object> body = new HashMap<>();
+            body.put("ids", ids);
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.DELETE, request, Map.class);
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                Object code = response.getBody().get("code");
+                return code != null && code.toString().equals("0");
+            }
+            return false;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
 } 
