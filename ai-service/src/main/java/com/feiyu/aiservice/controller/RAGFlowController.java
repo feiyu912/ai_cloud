@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/ragflow")
@@ -70,5 +71,20 @@ public class RAGFlowController {
         
         List<Map<String, Object>> results = ragFlowService.queryKnowledge(question);
         return ResponseEntity.ok(Map.of("success", true, "data", results));
+    }
+
+    /**
+     * 全局知识库上传文档
+     */
+    @PostMapping("/datasets/{datasetId}/upload")
+    public ResponseEntity<?> uploadToDataset(
+            @PathVariable String datasetId,
+            @RequestParam("file") MultipartFile file) {
+        String result = ragFlowService.uploadDocument(file, datasetId, null, null);
+        if (result.contains("成功")) {
+            return ResponseEntity.ok(Map.of("success", true, "message", result));
+        } else {
+            return ResponseEntity.status(500).body(Map.of("success", false, "error", result));
+        }
     }
 } 

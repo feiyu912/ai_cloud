@@ -7,14 +7,12 @@ import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 
 import ChatPage from './pages/ChatPage.vue'
-import UploadPage from './pages/UploadPage.vue'
 import KnowledgeBasePage from './pages/KnowledgeBasePage.vue'
 import LoginPage from './pages/LoginPage.vue'
 import RegisterPage from './pages/RegisterPage.vue'
 
 const routes = [
   { path: '/', component: ChatPage, name: 'Chat', meta: { requiresAuth: true } },
-  { path: '/upload', component: UploadPage, name: 'Upload' },
   { path: '/knowledge-base', component: KnowledgeBasePage, name: 'KnowledgeBase', meta: { requiresAuth: true } },
   { path: '/login', component: LoginPage, name: 'Login' },
   { path: '/register', component: RegisterPage, name: 'Register' },

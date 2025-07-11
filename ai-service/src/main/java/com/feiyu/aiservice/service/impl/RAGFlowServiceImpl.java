@@ -86,23 +86,18 @@ public class RAGFlowServiceImpl implements RAGFlowService {
     @Override
     public String uploadDocument(MultipartFile file, String datasetId, String authorization, String cookie) {
         try {
-            // 使用官方API: POST /v1/datasets/{dataset_id}/documents
-            String uploadUrl = ragflowBaseUrl + "/v1/datasets/" + datasetId + "/documents";
-            
+            // 1. 上传文档
+            String uploadUrl = ragflowBaseUrl + "/api/v1/datasets/" + datasetId + "/documents";
             HttpHeaders uploadHeaders = new HttpHeaders();
             uploadHeaders.setContentType(MediaType.MULTIPART_FORM_DATA);
-            
-            // 优先使用API Key，如果没有则使用传入的authorization
             if (ragflowApiKey != null && !ragflowApiKey.isEmpty()) {
                 uploadHeaders.set("Authorization", "Bearer " + ragflowApiKey);
             } else if (authorization != null && !authorization.isEmpty()) {
                 uploadHeaders.set("Authorization", authorization);
             }
-            
             if (cookie != null && !cookie.isEmpty()) {
                 uploadHeaders.set("Cookie", cookie);
             }
-
             MultiValueMap<String, Object> uploadBody = new LinkedMultiValueMap<>();
             uploadBody.add("file", new ByteArrayResource(file.getBytes()) {
                 @Override
@@ -110,47 +105,47 @@ public class RAGFlowServiceImpl implements RAGFlowService {
                     return file.getOriginalFilename();
                 }
             });
-
             HttpEntity<MultiValueMap<String, Object>> uploadRequest = new HttpEntity<>(uploadBody, uploadHeaders);
             ResponseEntity<Map> uploadResponse = restTemplate.exchange(uploadUrl, HttpMethod.POST, uploadRequest, Map.class);
-
             if (uploadResponse.getStatusCode() != HttpStatus.OK || uploadResponse.getBody() == null) {
                 return "上传失败: " + (uploadResponse.getBody() != null ? uploadResponse.getBody().toString() : "无返回");
             }
 
-            // 解析返回，获取文档ID
-            Map<String, Object> uploadResult = uploadResponse.getBody();
-            if (uploadResult.containsKey("data")) {
-                List<Map<String, Object>> documents = (List<Map<String, Object>>) uploadResult.get("data");
-                if (!documents.isEmpty()) {
-                    String documentId = (String) documents.get(0).get("id");
-                    
-                    // 使用官方API: POST /v1/datasets/{dataset_id}/chunks 来解析文档
-                    String parseUrl = ragflowBaseUrl + "/v1/datasets/" + datasetId + "/chunks";
-                    HttpHeaders parseHeaders = new HttpHeaders();
-                    parseHeaders.setContentType(MediaType.APPLICATION_JSON);
-                    
-                    if (ragflowApiKey != null && !ragflowApiKey.isEmpty()) {
-                        parseHeaders.set("Authorization", "Bearer " + ragflowApiKey);
-                    } else if (authorization != null && !authorization.isEmpty()) {
-                        parseHeaders.set("Authorization", authorization);
-                    }
-
-                    Map<String, Object> parseBody = new HashMap<>();
-                    parseBody.put("document_ids", Collections.singletonList(documentId));
-
-                    HttpEntity<Map<String, Object>> parseRequest = new HttpEntity<>(parseBody, parseHeaders);
-                    ResponseEntity<Map> parseResponse = restTemplate.exchange(parseUrl, HttpMethod.POST, parseRequest, Map.class);
-
-                    if (parseResponse.getStatusCode() == HttpStatus.OK) {
-                        return "文档上传并解析成功，文档ID: " + documentId;
-                    } else {
-                        return "文档上传成功但解析失败: " + (parseResponse.getBody() != null ? parseResponse.getBody().toString() : "无返回");
+            // 2. 获取文档列表，拿到最新文档ID
+            String listUrl = ragflowBaseUrl + "/api/v1/datasets/" + datasetId + "/documents?page=1&page_size=1";
+            HttpHeaders listHeaders = new HttpHeaders();
+            listHeaders.set("Authorization", "Bearer " + ragflowApiKey);
+            HttpEntity<String> listRequest = new HttpEntity<>(listHeaders);
+            ResponseEntity<Map> listResponse = restTemplate.exchange(listUrl, HttpMethod.GET, listRequest, Map.class);
+            String documentId = null;
+            if (listResponse.getStatusCode() == HttpStatus.OK && listResponse.getBody() != null) {
+                Map<String, Object> body = listResponse.getBody();
+                if (body.containsKey("data")) {
+                    Map<String, Object> data = (Map<String, Object>) body.get("data");
+                    List<Map<String, Object>> docs = (List<Map<String, Object>>) data.get("docs");
+                    if (docs != null && !docs.isEmpty()) {
+                        documentId = (String) docs.get(0).get("id");
                     }
                 }
             }
-            
-            return "上传成功但未获取到文档ID";
+            if (documentId == null) {
+                return "上传成功但未获取到文档ID";
+            }
+
+            // 3. 自动调用解析接口
+            String parseUrl = ragflowBaseUrl + "/api/v1/datasets/" + datasetId + "/chunks";
+            HttpHeaders parseHeaders = new HttpHeaders();
+            parseHeaders.setContentType(MediaType.APPLICATION_JSON);
+            parseHeaders.set("Authorization", "Bearer " + ragflowApiKey);
+            Map<String, Object> parseBody = new HashMap<>();
+            parseBody.put("document_ids", Collections.singletonList(documentId));
+            HttpEntity<Map<String, Object>> parseRequest = new HttpEntity<>(parseBody, parseHeaders);
+            ResponseEntity<Map> parseResponse = restTemplate.exchange(parseUrl, HttpMethod.POST, parseRequest, Map.class);
+            if (parseResponse.getStatusCode() == HttpStatus.OK) {
+                return "文档上传并解析成功，文档ID: " + documentId;
+            } else {
+                return "文档上传成功但解析失败: " + (parseResponse.getBody() != null ? parseResponse.getBody().toString() : "无返回");
+            }
         } catch (Exception e) {
             e.printStackTrace();
             return "上传或解析异常: " + e.getMessage();

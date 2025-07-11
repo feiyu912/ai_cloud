@@ -233,15 +233,13 @@ async function handleUpload() {
   try {
     const formData = new FormData()
     formData.append('file', selectedFile.value)
-    formData.append('datasetId', uploadForm.value.datasetId)
-    
-    const res = await fetch('/ai/chat/session/1/upload', {
+    // 新接口：/ai/ragflow/datasets/{datasetId}/upload
+    const res = await fetch(`/ai/ragflow/datasets/${uploadForm.value.datasetId}/upload`, {
       method: 'POST',
       body: formData
     })
-    
-    if (res.ok) {
-      const text = await res.text()
+    const data = await res.json()
+    if (res.ok && data.success) {
       ElMessage.success('文件上传成功！')
       showUploadDialog.value = false
       // 清空选择
@@ -252,8 +250,7 @@ async function handleUpload() {
         uploadRef.value.clearFiles()
       }
     } else {
-      const errorText = await res.text()
-      ElMessage.error('上传失败：' + errorText)
+      ElMessage.error('上传失败：' + (data.error || '未知错误'))
     }
   } catch (e) {
     ElMessage.error('上传失败：' + e.message)
