@@ -31,9 +31,12 @@
       <el-empty v-if="!loading && results.length === 0 && searched" description="未找到相关内容" />
       <el-skeleton v-if="loading" rows="4" animated />
       <el-card v-for="(item, idx) in results" :key="idx" class="kb-retrieval-item">
-        <div v-html="item.highlight || item.content"></div>
-        <div class="kb-score">相关度：{{ (item.similarity * 100).toFixed(2) }}%</div>
-        <div class="kb-source">来源：{{ item.document_keyword || '未知文档' }}</div>
+        <div class="kb-meta">
+          <span v-if="item.similarity !== undefined">{{ (item.similarity * 100).toFixed(2) }} 混合相似度</span>
+          <span v-if="item.term_similarity !== undefined">{{ (item.term_similarity * 100).toFixed(2) }} 关键词相似度</span>
+          <span v-if="item.vector_similarity !== undefined">{{ (item.vector_similarity * 100).toFixed(2) }} 向量相似度</span>
+        </div>
+        <div class="kb-content" v-html="item.highlight || item.content"></div>
       </el-card>
     </div>
   </div>
@@ -92,12 +95,7 @@ async function handleRetrieval() {
   try {
     const body = {
       question: form.value.question,
-      dataset_ids: [props.datasetId],
-      document_ids: form.value.document_ids,
-      similarity_threshold: form.value.similarity_threshold,
-      vector_similarity_weight: form.value.vector_similarity_weight,
-      rerank_id: form.value.rerank_id,
-      highlight: form.value.highlight
+      dataset_ids: [props.datasetId]
     }
     const res = await fetch('/ai/ragflow/retrieval', {
       method: 'POST',
@@ -106,7 +104,7 @@ async function handleRetrieval() {
     })
     const data = await res.json()
     if ((data.success || data.code === 0) && data.data) {
-      results.value = data.data.chunks || []
+      results.value = data.data
     } else {
       ElMessage.error(data.message || '检索失败')
     }
@@ -128,5 +126,36 @@ async function handleRetrieval() {
 }
 .kb-retrieval-item {
   margin-bottom: 16px;
+}
+.kb-retrieval-form {
+  padding-left: 40px;
+}
+.kb-retrieval-result{
+  padding-left: 20px;
+}
+.kb-meta {
+  color: #444;
+  font-size: 15px;
+  margin-bottom: 10px;
+  display: flex;
+  gap: 24px;
+  font-weight: 500;
+  letter-spacing: 1px;
+}
+.kb-meta span {
+  white-space: nowrap;
+}
+.kb-content {
+  font-size: 16px;
+  color: #222;
+  line-height: 1.7;
+  word-break: break-all;
+}
+.kb-content em {
+  background: #ffe58f;
+  color: #d48806;
+  font-style: normal;
+  padding: 0 2px;
+  border-radius: 2px;
 }
 </style> 

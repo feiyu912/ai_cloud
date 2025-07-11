@@ -30,16 +30,14 @@ public class RAGFlowServiceImpl implements RAGFlowService {
     private String ragflowApiKey;
     
     @Override
-    public List<Map<String, Object>> queryKnowledge(String question) {
+    public List<Map<String, Object>> queryKnowledge(String question, List<String> datasetIds) {
         try {
             // 使用官方API: POST /v1/retrieval
-            String url = ragflowBaseUrl + "/v1/retrieval";
+            String url = ragflowBaseUrl + "/api/v1/retrieval";
             Map<String, Object> request = new HashMap<>();
             request.put("question", question);
-            request.put("top_k", 5);
-            request.put("similarity_threshold", 0.2);
-            request.put("vector_similarity_weight", 0.3);
-            request.put("highlight", true);
+            request.put("dataset_ids", datasetIds);
+            // 可选参数可后续加，这里只传最简参数
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -56,18 +54,7 @@ public class RAGFlowServiceImpl implements RAGFlowService {
                     Map<String, Object> data = (Map<String, Object>) body.get("data");
                     if (data.containsKey("chunks")) {
                         List<Map<String, Object>> chunks = (List<Map<String, Object>>) data.get("chunks");
-                        List<Map<String, Object>> results = new ArrayList<>();
-                        for (Map<String, Object> chunk : chunks) {
-                            Map<String, Object> result = new HashMap<>();
-                            result.put("source", "ragflow");
-                            result.put("text", chunk.get("content"));
-                            result.put("score", chunk.get("similarity"));
-                            result.put("highlight", chunk.get("highlight"));
-                            result.put("document_id", chunk.get("document_id"));
-                            result.put("document_name", chunk.get("document_keyword"));
-                            results.add(result);
-                        }
-                        return results;
+                        return chunks;
                     }
                 }
             }
@@ -77,8 +64,8 @@ public class RAGFlowServiceImpl implements RAGFlowService {
             System.err.println("[RAGFlow] 知识库检索失败: " + e.getMessage());
             return Collections.singletonList(Map.of(
                 "source", "ragflow",
-                "text", "知识库服务异常，请稍后重试",
-                "score", 0
+                "content", "知识库服务异常，请稍后重试",
+                "similarity", 0
             ));
         }
     }

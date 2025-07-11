@@ -59,15 +59,17 @@ public class RAGFlowController {
     /**
      * 知识库检索
      */
-    @PostMapping("/search")
-    public ResponseEntity<Map<String, Object>> search(@RequestBody Map<String, String> request) {
-        String question = request.get("question");
-        
+    @PostMapping("/retrieval")
+    public ResponseEntity<Map<String, Object>> search(@RequestBody Map<String, Object> request) {
+        String question = (String) request.get("question");
+        List<String> datasetIds = (List<String>) request.get("dataset_ids");
         if (question == null || question.trim().isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "问题不能为空"));
         }
-        
-        List<Map<String, Object>> results = ragFlowService.queryKnowledge(question);
+        if (datasetIds == null || datasetIds.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "dataset_ids 不能为空"));
+        }
+        List<Map<String, Object>> results = ragFlowService.queryKnowledge(question, datasetIds);
         return ResponseEntity.ok(Map.of("success", true, "data", results));
     }
 

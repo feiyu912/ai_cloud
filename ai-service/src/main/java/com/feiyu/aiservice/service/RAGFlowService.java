@@ -10,9 +10,10 @@ public interface RAGFlowService {
     /**
      * 知识库检索
      * @param question 用户问题
+     * @param datasetIds 数据集ID列表
      * @return 检索结果列表
      */
-    List<Map<String, Object>> queryKnowledge(String question);
+    List<Map<String, Object>> queryKnowledge(String question, List<String> datasetIds);
     
     /**
      * 文档上传到知识库

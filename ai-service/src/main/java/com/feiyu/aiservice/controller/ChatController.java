@@ -118,10 +118,12 @@ public class ChatController {
 
     // 对话检索接口：只通过RAGFlowService远程检索
     @PostMapping("/session/{sessionId}/search")
-    public List<Map<String, Object>> searchSessionAndGlobal(@PathVariable("sessionId") Long sessionId, @RequestBody String query) {
+    public List<Map<String, Object>> searchSessionAndGlobal(@PathVariable("sessionId") Long sessionId, @RequestBody Map<String, Object> body) {
         List<Map<String, Object>> results = new ArrayList<>();
         try {
-            List<Map<String, Object>> ragflowResults = ragFlowService.queryKnowledge(query);
+            String question = (String) body.get("question");
+            List<String> datasetIds = (List<String>) body.get("dataset_ids");
+            List<Map<String, Object>> ragflowResults = ragFlowService.queryKnowledge(question, datasetIds);
             results.addAll(ragflowResults);
             System.out.println("[DEBUG] RAGFlow检索到 " + ragflowResults.size() + " 条结果");
         } catch (Exception e) {
