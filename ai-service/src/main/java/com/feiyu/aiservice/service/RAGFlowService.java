@@ -42,4 +42,9 @@ public interface RAGFlowService {
      * @return 数据集列表
      */
     List<Map<String, Object>> listDatasets();
+
+    /**
+     * 获取指定数据集下的文档列表
+     */
+    List<Map<String, Object>> listDocuments(String datasetId, Integer page, Integer pageSize, String keywords);
 } 

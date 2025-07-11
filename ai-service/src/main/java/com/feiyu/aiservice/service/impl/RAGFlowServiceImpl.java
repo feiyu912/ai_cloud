@@ -231,4 +231,33 @@ public class RAGFlowServiceImpl implements RAGFlowService {
             return Collections.emptyList();
         }
     }
+
+    @Override
+    public List<Map<String, Object>> listDocuments(String datasetId, Integer page, Integer pageSize, String keywords) {
+        try {
+            String url = ragflowBaseUrl + "/api/v1/datasets/" + datasetId + "/documents";
+            StringBuilder params = new StringBuilder();
+            if (page != null) params.append("?page=" + page);
+            if (pageSize != null) params.append((params.length() > 0 ? "&" : "?") + "page_size=" + pageSize);
+            if (keywords != null && !keywords.isEmpty()) params.append((params.length() > 0 ? "&" : "?") + "keywords=" + keywords);
+            url += params.toString();
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Authorization", "Bearer " + ragflowApiKey);
+            HttpEntity<String> request = new HttpEntity<>(headers);
+            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, request, Map.class);
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                Map<String, Object> body = response.getBody();
+                if (body.containsKey("data")) {
+                    Map<String, Object> data = (Map<String, Object>) body.get("data");
+                    if (data.containsKey("docs")) {
+                        return (List<Map<String, Object>>) data.get("docs");
+                    }
+                }
+            }
+            return Collections.emptyList();
+        } catch (Exception e) {
+            System.err.println("[RAGFlow] 获取文档列表失败: " + e.getMessage());
+            return Collections.emptyList();
+        }
+    }
 } 

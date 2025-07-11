@@ -87,4 +87,17 @@ public class RAGFlowController {
             return ResponseEntity.status(500).body(Map.of("success", false, "error", result));
         }
     }
+
+    /**
+     * 获取指定数据集下的文档列表
+     */
+    @GetMapping("/datasets/{datasetId}/documents")
+    public ResponseEntity<Map<String, Object>> listDocuments(
+            @PathVariable String datasetId,
+            @RequestParam(value = "page", required = false) Integer page,
+            @RequestParam(value = "page_size", required = false) Integer pageSize,
+            @RequestParam(value = "keywords", required = false) String keywords) {
+        List<Map<String, Object>> docs = ragFlowService.listDocuments(datasetId, page, pageSize, keywords);
+        return ResponseEntity.ok(Map.of("success", true, "data", Map.of("docs", docs)));
+    }
 } 

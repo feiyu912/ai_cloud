@@ -6,18 +6,24 @@
         上传文档
       </el-button>
     </div>
-    <el-table :data="files" style="width: 100%; margin-top: 16px;">
-      <el-table-column prop="name" label="名称" />
-      <el-table-column prop="chunk_count" label="分块数" />
-      <el-table-column prop="create_date" label="上传日期" />
-      <el-table-column prop="chunk_method" label="切片方法" />
-      <el-table-column label="操作">
-        <template #default="scope">
-          <el-button size="small" @click="parseFile(scope.row)">解析</el-button>
-          <el-button size="small" type="danger" @click="deleteFile(scope.row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <div class="kb-files-table-wrapper">
+      <el-table :data="files" style="width: 100%; margin-top: 16px;">
+        <el-table-column prop="name" label="名称">
+          <template #default="scope">
+            <el-link type="primary" @click="onFileClick(scope.row)">{{ scope.row.name }}</el-link>
+          </template>
+        </el-table-column>
+        <el-table-column prop="chunk_count" label="分块数" />
+        <el-table-column prop="create_date" label="上传日期" />
+        <el-table-column prop="chunk_method" label="切片方法" />
+        <el-table-column label="操作">
+          <template #default="scope">
+            <el-button size="small" type="danger" @click="deleteFile(scope.row)">删除</el-button>
+            <el-button size="small" @click="downloadFile(scope.row)">下载</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
     <!-- 上传文件对话框 -->
     <el-dialog v-model="showUploadDialog" title="上传文档" width="500px">
       <el-upload
@@ -52,7 +58,7 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElLink } from 'element-plus'
 import { Upload, UploadFilled } from '@element-plus/icons-vue'
 
 const props = defineProps({
@@ -114,25 +120,6 @@ async function handleUpload() {
   }
 }
 
-async function parseFile(row) {
-  try {
-    const res = await fetch(`/ai/ragflow/datasets/${props.datasetId}/chunks`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ document_ids: [row.id] })
-    })
-    const data = await res.json()
-    if (data.success || data.code === 0) {
-      ElMessage.success('解析任务已提交')
-      loadFiles()
-    } else {
-      ElMessage.error(data.message || '解析失败')
-    }
-  } catch (e) {
-    ElMessage.error('解析失败')
-  }
-}
-
 async function deleteFile(row) {
   try {
     const res = await fetch(`/ai/ragflow/datasets/${props.datasetId}/documents`, {
@@ -151,6 +138,29 @@ async function deleteFile(row) {
     ElMessage.error('删除失败')
   }
 }
+
+function onFileClick(row) {
+  // TODO: 跳转到chunk界面，后续实现
+  ElMessage.info(`点击了文档：${row.name}`)
+}
+
+async function downloadFile(row) {
+  try {
+    const url = `/ai/ragflow/datasets/${props.datasetId}/documents/${row.id}`
+    const res = await fetch(url, {
+      method: 'GET',
+    })
+    if (!res.ok) throw new Error('下载失败')
+    const blob = await res.blob()
+    const a = document.createElement('a')
+    a.href = window.URL.createObjectURL(blob)
+    a.download = row.name || 'document'
+    a.click()
+    window.URL.revokeObjectURL(a.href)
+  } catch (e) {
+    ElMessage.error('下载失败')
+  }
+}
 </script>
 
 <style scoped>
@@ -158,6 +168,9 @@ async function deleteFile(row) {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  margin: 0px 24px 0 0;
+  margin: 24px 24px 0 0;
+}
+.kb-files-table-wrapper {
+  padding-left: 24px;
 }
 </style> 
