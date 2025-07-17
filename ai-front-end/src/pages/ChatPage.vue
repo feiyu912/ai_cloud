@@ -203,6 +203,8 @@ const mcpTools = ref([]);
 const selectedTools = ref([]);
 const showUsedToolsDialog = ref(false);
 const usedMcpTools = ref([]);
+const selectedDatasetIds = ref([]) // 多选知识库ID数组
+const datasets = ref([]) // 所有知识库
 
 function formatTime(time) {
   if (!time) return ''
@@ -283,29 +285,29 @@ async function sendMessage() {
     // 2. 先获取AI参考内容
     const refRes = await fetch(`/ai/chat/session/${currentSessionId.value}/search`, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: prompt
+      headers: { 'Content-Type': 'application/json', Authorization: token },
+      body: JSON.stringify({
+        question: prompt,
+        dataset_ids: selectedDatasetIds.value // 这里传所有知识库ID
+      })
     })
     const thisReference = await refRes.json()
-    console.log('thisReference', thisReference)
-    // 强制让 reference 字段始终有内容
     let fixedReference = thisReference
     if (!Array.isArray(thisReference) || thisReference.length === 0) {
       fixedReference = [{ source: 'global', text: '【无检索结果，已兜底，后端返回空数组】' }]
     }
 
     // 3. 流式请求AI回复
-    console.log('发送的工具选择:', selectedTools.value)
     const requestBody = {
-      prompt: prompt,
-      tools: selectedTools.value
+      question: prompt,
+      dataset_ids: selectedDatasetIds.value, // 自动传所有知识库ID
+      tools: selectedTools.value // 传所选MCP工具名
     }
-    console.log('请求体:', requestBody)
     const res = await fetch(`/ai/chat/session/${currentSessionId.value}/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'text/event-stream'
+        Authorization: token
       },
       body: JSON.stringify(requestBody)
     })
@@ -330,7 +332,6 @@ async function sendMessage() {
         }
       }
     }
-    // 4. AI回复结束后，重新获取消息列表以包含MCP内容
     await fetchMessages()
     streaming.value = false
     streamingContent.value = ''
@@ -445,6 +446,7 @@ async function deleteSession(id) {
 onMounted(() => {
   fetchSessions()
   fetchMcpTools()
+  fetchDatasets() // 页面加载时自动获取知识库列表并默认全选
 })
 
 async function fetchMcpTools() {
@@ -510,6 +512,19 @@ function extractToolNamesFromMcpContent(mcpContent) {
 function getToolDescription(toolName) {
   const tool = mcpTools.value.find(t => t.name === toolName);
   return tool ? tool.description : toolName;
+}
+
+// 确保 datasets 和 selectedDatasetIds 已声明
+// 只补充 fetchDatasets 方法
+async function fetchDatasets() {
+  const token = localStorage.getItem('token')
+  const res = await fetch('/ai/ragflow/datasets', { headers: { Authorization: token } })
+  const data = await res.json()
+  if (data && data.data && data.data.length) {
+    datasets.value = data.data
+    // 自动全选所有知识库ID
+    selectedDatasetIds.value = data.data.map(ds => ds.id)
+  }
 }
 </script>
 

@@ -131,4 +131,109 @@ public class ChatController {
         }
         return results;
     }
+
+    @PostMapping("/session/{id}/chat")
+    public Map<String, Object> chatWithSession(
+            @RequestHeader("Authorization") String token,
+            @PathVariable("id") Long sessionId,
+            @RequestBody Map<String, Object> body) {
+        Long userId = UserController.getUserIdByToken(token);
+        String question = (String) body.get("question");
+        Object datasetIdsObj = body.get("dataset_ids");
+        List<String> datasetIds = null;
+        if (datasetIdsObj instanceof List<?>) {
+            datasetIds = new ArrayList<>();
+            for (Object o : (List<?>) datasetIdsObj) {
+                if (o != null) datasetIds.add(o.toString());
+            }
+        }
+        Object toolsObj = body.get("tools");
+        List<String> tools = null;
+        if (toolsObj instanceof List<?>) {
+            tools = new ArrayList<>();
+            for (Object o : (List<?>) toolsObj) {
+                if (o != null) tools.add(o.toString());
+            }
+        }
+        System.out.println("[DEBUG] chatWithSession 参数: question=" + question + ", datasetIds=" + datasetIds + ", tools=" + tools);
+
+        if (datasetIds == null || datasetIds.isEmpty()) {
+            return Map.of("success", false, "msg", "未指定有效的知识库ID（dataset_ids）");
+        }
+        if (question == null || question.trim().isEmpty()) {
+            return Map.of("success", false, "msg", "问题不能为空");
+        }
+
+        // 1. ragflow 检索知识库
+        List<Map<String, Object>> ragflowResults = ragFlowService.queryKnowledge(question, datasetIds);
+
+        // 2. 过滤相似度低于0.7的内容
+        List<Map<String, Object>> filtered = new ArrayList<>();
+        for (Map<String, Object> item : ragflowResults) {
+            Object simObj = item.get("similarity");
+            double sim = 0;
+            if (simObj instanceof Number) sim = ((Number) simObj).doubleValue();
+            else if (simObj != null) try { sim = Double.parseDouble(simObj.toString()); } catch (Exception ignore) {}
+            if (sim >= 0.7) filtered.add(item);
+        }
+
+        // 3. 拼接上下文
+        StringBuilder contextBuilder = new StringBuilder();
+        for (Map<String, Object> item : filtered) {
+            String content = (String) item.getOrDefault("content", "");
+            String docName = (String) item.getOrDefault("document_name", "");
+            Object pageNum = item.getOrDefault("pageNum", "");
+            Object sim = item.getOrDefault("similarity", "");
+            contextBuilder.append(content);
+            if (!docName.isEmpty() || !"".equals(pageNum)) {
+                contextBuilder.append("（文档: ").append(docName);
+                if (!"".equals(pageNum)) contextBuilder.append("，页码: ").append(pageNum);
+                if (!"".equals(sim)) contextBuilder.append("，相似度: ").append(sim);
+                contextBuilder.append("）");
+            }
+            contextBuilder.append("\n");
+        }
+        String contextString = contextBuilder.toString().trim();
+
+        // 4. PromptTemplate
+        String promptWithContext = """
+已知知识如下：\n---------------------\n{question_answer_context}\n---------------------\n用户问题：{query}\n请结合知识作答。
+""";
+        org.springframework.ai.chat.prompt.PromptTemplate promptTemplate = org.springframework.ai.chat.prompt.PromptTemplate.builder()
+                .template(promptWithContext)
+                .variables(Map.of(
+                    "query", question,
+                    "question_answer_context", contextString
+                ))
+                .build();
+        String finalPrompt = promptTemplate.render();
+
+        // 5. MCP工具注册
+        org.springframework.ai.tool.ToolCallback[] toolCallbacks = mcpToolCallbacks.getToolCallbacks();
+        org.springframework.ai.model.tool.ToolCallingChatOptions chatOptions = org.springframework.ai.model.tool.ToolCallingChatOptions.builder()
+            .toolCallbacks(toolCallbacks)
+            .build();
+
+        // 6. 构造 Prompt
+        org.springframework.ai.chat.prompt.Prompt promptObj = new org.springframework.ai.chat.prompt.Prompt(finalPrompt, chatOptions);
+
+        // 7. 调用大模型
+        String aiReply;
+        try {
+            aiReply = chatModel.call(promptObj).getResult().getOutput().getText();
+        } catch (Exception e) {
+            System.err.println("[DEBUG] 大模型调用失败: " + e.getMessage());
+            return Map.of("success", false, "msg", "AI回复失败: " + e.getMessage());
+        }
+
+        // 8. 保存AI回复到数据库
+        try {
+            String referenceJson = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(filtered);
+            chatMessageService.addMessage(sessionId, "assistant", aiReply, referenceJson);
+        } catch (Exception ex) {
+            System.err.println("[DEBUG] 保存AI回复到数据库失败: " + ex.getMessage());
+        }
+        // 9. 返回结构
+        return Map.of("success", true, "reply", aiReply, "reference", filtered);
+    }
 }
