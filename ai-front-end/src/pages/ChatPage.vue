@@ -3,7 +3,7 @@
     <div class="chat-sessions">
       <div class="session-header">
         <span style="font-weight:600; font-size:1.1rem;">历史会话</span>
-        <el-button circle size="small" type="primary" @click="createSession" style="margin-left:auto; font-size:15px; font-weight:500; letter-spacing:2px; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">新建</el-button>
+        <el-button circle size="small" type="primary" @click="handleCreateClick" style="margin-left:auto; font-size:15px; font-weight:500; letter-spacing:2px; width:40px; height:40px; display:flex; align-items:center; justify-content:center;">新建</el-button>
       </div>
       <el-scrollbar class="session-list">
         <div v-for="session in sessions" :key="session.id" :class="['session-item', session.id === currentSessionId ? 'active' : '']">
@@ -172,6 +172,38 @@
             <el-empty v-if="usedMcpTools.length === 0" description="暂无使用过的工具" />
           </div>
         </el-dialog>
+
+        <!-- 新建会话弹窗 -->
+        <el-dialog v-model="showCreateSessionDialog" title="新建会话" width="500px">
+          <el-form :model="newSessionForm" label-width="80px">
+            <el-form-item label="会话名称">
+              <el-input v-model="newSessionForm.title" placeholder="请输入会话名称" />
+            </el-form-item>
+            <el-form-item label="选择知识库" required>
+              <el-select
+                v-model="newSessionForm.datasetId"
+                placeholder="请选择知识库"
+                style="width: 100%;"
+                @change="val => console.log('选择了知识库', val)"
+              >
+                <el-option
+                  v-for="dataset in datasets"
+                  :key="dataset.id"
+                  :label="dataset.name"
+                  :value="dataset.id"
+                />
+              </el-select>
+            </el-form-item>
+          </el-form>
+          <template #footer>
+            <span class="dialog-footer">
+              <el-button @click="showCreateSessionDialog = false">取消</el-button>
+              <el-button type="primary" @click="createSession" :disabled="!newSessionForm.datasetId">
+                创建
+              </el-button>
+            </span>
+          </template>
+        </el-dialog>
       </div>
       <div class="upload-tip">支持上传文件</div>
     </div>
@@ -179,7 +211,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { ChatLineRound, Upload, UploadFilled, Tools } from '@element-plus/icons-vue'
 import { ElMessage, ElNotification } from 'element-plus'
 import axios from 'axios'
@@ -198,6 +230,12 @@ const fileList = ref([])
 const uploading = ref(false)
 const uploadRef = ref()
 
+// 新建会话弹窗相关变量
+const showCreateSessionDialog = ref(false)
+const newSessionForm = ref({
+  title: '',
+  datasetId: ''
+})
 // MCP工具相关
 const mcpTools = ref([]);
 const selectedTools = ref([]);
@@ -244,17 +282,26 @@ async function fetchMessages() {
 }
 
 async function createSession() {
+  console.log('创建会话，选中的知识库ID：', newSessionForm.value.datasetId)
+  if (!newSessionForm.value.datasetId) {
+    ElMessage.warning('请选择知识库')
+    return
+  }
   const token = localStorage.getItem('token')
   const res = await fetch('/ai/chat/session', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: token },
-    body: JSON.stringify({ title: '新会话' })
+    body: JSON.stringify({ title: newSessionForm.value.title, dataset_id: newSessionForm.value.datasetId })
   })
   const data = await res.json()
   if (data.success) {
     await fetchSessions()
     currentSessionId.value = data.id
     messages.value = []
+    // 关闭弹窗并清空表单
+    showCreateSessionDialog.value = false
+    newSessionForm.value.title = ''
+    newSessionForm.value.datasetId = ''
   } else {
     ElMessage.error(data.msg || '新建会话失败')
   }
@@ -441,6 +488,12 @@ async function deleteSession(id) {
   } else {
     ElMessage.error(data.msg || '删除失败')
   }
+}
+
+function handleCreateClick() {
+  console.log('点击新建前', showCreateSessionDialog.value)
+  showCreateSessionDialog.value = true
+  console.log('点击新建后', showCreateSessionDialog.value)
 }
 
 onMounted(() => {
