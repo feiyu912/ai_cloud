@@ -19,19 +19,19 @@ spring:
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
   ai:
-    dash-scope:
+    dashscope:
       api-key: sk-a75e2109f45e4704b3c14cb25e245186
       chat:
         options:
           incremental-output: false
-          model: qwen-max
+          model: qwen-max-latest
       embedding:
         options:
-          model: text-embedding-v2
+          model: text-embedding-v4
       image:
         options:
           model: wanx-v1
-    # 向量存储配置已移除，使用RAGFlow远程服务
+      read-timeout: 600000
 
   cloud:
     nacos:

@@ -9,6 +9,9 @@ spring:
       discovery:
         ip: 127.0.0.1
     gateway:
+      httpclient:
+        connect-timeout: 60000   # 60秒连接超时
+        response-timeout: 60000  # 60秒响应超时
       routes:
         - id: ai-service
           uri: lb://ai-service

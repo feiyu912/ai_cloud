@@ -7,6 +7,7 @@ import com.feiyu.aiservice.service.ChatMessageService;
 // ChatSessionFileService已删除，使用RAGFlow远程服务
 import com.feiyu.aiservice.service.ChatSessionService;
 import com.feiyu.aiservice.service.RAGFlowService;
+import com.feiyu.aiservice.util.PromptBuilder;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +15,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 
 @RestController
 @RequestMapping("/chat")
@@ -137,103 +140,83 @@ public class ChatController {
             @RequestHeader("Authorization") String token,
             @PathVariable("id") Long sessionId,
             @RequestBody Map<String, Object> body) {
-        Long userId = UserController.getUserIdByToken(token);
         String question = (String) body.get("question");
-        Object datasetIdsObj = body.get("dataset_ids");
-        List<String> datasetIds = null;
-        if (datasetIdsObj instanceof List<?>) {
-            datasetIds = new ArrayList<>();
-            for (Object o : (List<?>) datasetIdsObj) {
-                if (o != null) datasetIds.add(o.toString());
-            }
-        }
-        Object toolsObj = body.get("tools");
-        List<String> tools = null;
-        if (toolsObj instanceof List<?>) {
-            tools = new ArrayList<>();
-            for (Object o : (List<?>) toolsObj) {
-                if (o != null) tools.add(o.toString());
-            }
-        }
-        System.out.println("[DEBUG] chatWithSession 参数: question=" + question + ", datasetIds=" + datasetIds + ", tools=" + tools);
-
-        if (datasetIds == null || datasetIds.isEmpty()) {
-            return Map.of("success", false, "msg", "未指定有效的知识库ID（dataset_ids）");
-        }
         if (question == null || question.trim().isEmpty()) {
             return Map.of("success", false, "msg", "问题不能为空");
         }
 
-        // 1. ragflow 检索知识库
-        List<Map<String, Object>> ragflowResults = ragFlowService.queryKnowledge(question, datasetIds);
-
-        // 2. 过滤相似度低于0.7的内容
+        // ====== 恢复 RAG 检索和拼接 ======
+        Long userId = UserController.getUserIdByToken(token);
+        Object datasetIdsObj = body.get("dataset_ids");
+        List<String> datasetIds = null;
+        if (datasetIdsObj instanceof List<?>) {
+            datasetIds = (List<String>) datasetIdsObj;
+        }
         List<Map<String, Object>> filtered = new ArrayList<>();
-        for (Map<String, Object> item : ragflowResults) {
-            Object simObj = item.get("similarity");
-            double sim = 0;
-            if (simObj instanceof Number) sim = ((Number) simObj).doubleValue();
-            else if (simObj != null) try { sim = Double.parseDouble(simObj.toString()); } catch (Exception ignore) {}
-            if (sim >= 0.7) filtered.add(item);
-        }
-
-        // 3. 拼接上下文
-        StringBuilder contextBuilder = new StringBuilder();
-        for (Map<String, Object> item : filtered) {
-            String content = (String) item.getOrDefault("content", "");
-            String docName = (String) item.getOrDefault("document_name", "");
-            Object pageNum = item.getOrDefault("pageNum", "");
-            Object sim = item.getOrDefault("similarity", "");
-            contextBuilder.append(content);
-            if (!docName.isEmpty() || !"".equals(pageNum)) {
-                contextBuilder.append("（文档: ").append(docName);
-                if (!"".equals(pageNum)) contextBuilder.append("，页码: ").append(pageNum);
-                if (!"".equals(sim)) contextBuilder.append("，相似度: ").append(sim);
-                contextBuilder.append("）");
+        if (datasetIds != null && !datasetIds.isEmpty()) {
+            try {
+                List<Map<String, Object>> ragflowResults = ragFlowService.queryKnowledge(question, datasetIds);
+                filtered.addAll(ragflowResults);
+                System.out.println("[DEBUG] RAGFlow检索到 " + ragflowResults.size() + " 条结果");
+            } catch (Exception e) {
+                System.err.println("[DEBUG] RAGFlow检索失败: " + e.getMessage());
             }
-            contextBuilder.append("\n");
         }
-        String contextString = contextBuilder.toString().trim();
+        // 拼接 prompt
+        List<String> contextList = new ArrayList<>();
+        for (Map<String, Object> item : filtered) {
+            Object content = item.get("content");
+            if (content != null) contextList.add(content.toString());
+        }
+        String context = PromptBuilder.buildContext(contextList, 32000, 2000);
+        String finalPrompt = question + (context.isEmpty() ? "" : "\n\n相关知识：\n" + context);
+        // 打印 prompt 长度和内容
+        System.out.println("[DEBUG] prompt长度: " + finalPrompt.length());
+        System.out.println("[DEBUG] prompt内容: " + (finalPrompt.length() > 1000 ? finalPrompt.substring(0, 500) + "...\n..." + finalPrompt.substring(finalPrompt.length() - 500) : finalPrompt));
 
-        // 4. PromptTemplate
-        String promptWithContext = """
-已知知识如下：\n---------------------\n{question_answer_context}\n---------------------\n用户问题：{query}\n请结合知识作答。
-""";
-        org.springframework.ai.chat.prompt.PromptTemplate promptTemplate = org.springframework.ai.chat.prompt.PromptTemplate.builder()
-                .template(promptWithContext)
-                .variables(Map.of(
-                    "query", question,
-                    "question_answer_context", contextString
-                ))
-                .build();
-        String finalPrompt = promptTemplate.render();
-
-        // 5. MCP工具注册
-        org.springframework.ai.tool.ToolCallback[] toolCallbacks = mcpToolCallbacks.getToolCallbacks();
-        org.springframework.ai.model.tool.ToolCallingChatOptions chatOptions = org.springframework.ai.model.tool.ToolCallingChatOptions.builder()
-            .toolCallbacks(toolCallbacks)
-            .build();
-
-        // 6. 构造 Prompt
-        org.springframework.ai.chat.prompt.Prompt promptObj = new org.springframework.ai.chat.prompt.Prompt(finalPrompt, chatOptions);
-
-        // 7. 调用大模型
         String aiReply;
         try {
-            aiReply = chatModel.call(promptObj).getResult().getOutput().getText();
+            String apiKey = "sk-a75e2109f45e4704b3c14cb25e245186"; // 建议从配置读取
+            ObjectMapper objectMapper = new ObjectMapper();
+            String jsonBody = "{\n" +
+                "  \"model\": \"qwen-turbo\",\n" +
+                "  \"input\": {\n" +
+                "    \"messages\": [\n" +
+                "      {\"role\": \"user\", \"content\": " + objectMapper.writeValueAsString(finalPrompt) + "}\n" +
+                "    ]\n" +
+                "  }\n" +
+                "}";
+            System.out.println("[DEBUG] 实际请求体: " + jsonBody);
+
+            okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
+                .connectTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
+                .writeTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
+                .build();
+            okhttp3.Request request = new okhttp3.Request.Builder()
+                .url("https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation")
+                .addHeader("Authorization", "Bearer " + apiKey)
+                .addHeader("Content-Type", "application/json")
+                .post(okhttp3.RequestBody.create(jsonBody, okhttp3.MediaType.parse("application/json")))
+                .build();
+            try (okhttp3.Response response = client.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    throw new RuntimeException("DashScope API error: " + response.code() + " " + response.message());
+                }
+                String respBody = response.body().string();
+                JsonNode root = objectMapper.readTree(respBody);
+                aiReply = root.path("output").path("text").asText();
+            }
         } catch (Exception e) {
-            System.err.println("[DEBUG] 大模型调用失败: " + e.getMessage());
+            System.err.println("[DEBUG] DashScope调用失败: " + e.getMessage());
             return Map.of("success", false, "msg", "AI回复失败: " + e.getMessage());
         }
 
-        // 8. 保存AI回复到数据库
-        try {
-            String referenceJson = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(filtered);
-            chatMessageService.addMessage(sessionId, "assistant", aiReply, referenceJson);
-        } catch (Exception ex) {
-            System.err.println("[DEBUG] 保存AI回复到数据库失败: " + ex.getMessage());
+        // 保存 AI 回复到数据库
+        boolean ok = chatMessageService.addMessage(sessionId, "assistant", aiReply, filtered.toString());
+        if (!ok) {
+            System.err.println("[DEBUG] AI回复保存失败");
         }
-        // 9. 返回结构
         return Map.of("success", true, "reply", aiReply, "reference", filtered);
     }
 }
