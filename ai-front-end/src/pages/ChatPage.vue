@@ -74,7 +74,7 @@
           <div :class="['msg', msg.role]">
             <div class="msg-bubble">
               <b>{{ msg.role === 'user' ? '我' : 'AI' }}：</b>
-              <span v-if="msg.role === 'assistant'" style="white-space: pre-line;">{{ removeMarkdownBold(msg.content) }}</span>
+              <span v-if="msg.role === 'assistant'" v-html="renderMarkdown(msg.content)" class="ai-markdown"></span>
               <span v-else>{{ msg.content }}</span>
             </div>
             <!-- MCP工具调用信息显示 -->
@@ -99,7 +99,8 @@
         </div>
         <div v-if="streaming" class="msg assistant">
           <div class="msg-bubble">
-            <b>AI：</b><span style="white-space: pre-line;">{{ removeMarkdownBold(streamingContent) }}</span>
+            <b>AI：</b>
+            <span v-html="renderMarkdown(streamingContent)" class="ai-markdown"></span>
           </div>
         </div>
       </div>
@@ -226,6 +227,8 @@ import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { ChatLineRound, Upload, UploadFilled, Tools } from '@element-plus/icons-vue'
 import { ElMessage, ElNotification } from 'element-plus'
 import axios from 'axios'
+// 引入marked用于Markdown渲染
+import { marked } from 'marked'
 
 const input = ref('')
 const messages = ref([])
@@ -332,6 +335,11 @@ function removeMarkdownBold(content) {
   return content.replace(/\*\*/g, '').replace(/(\d+\.)/g, '\n$1');
 }
 
+// Markdown渲染方法
+function renderMarkdown(content) {
+  return marked.parse(content || '')
+}
+
 async function sendMessage() {
   if (!input.value.trim() || !currentSessionId.value) return
   streamingContent.value = ''
@@ -399,6 +407,7 @@ async function sendMessage() {
         }
       }
     }
+    // 流结束后再刷新历史消息
     await fetchMessages()
     streaming.value = false
     streamingContent.value = ''
@@ -954,5 +963,33 @@ watch(messages, (val) => {
 .last-used {
   color: #90a4ae;
   font-size: 12px;
+}
+
+.ai-markdown h1, .ai-markdown h2, .ai-markdown h3, .ai-markdown h4 {
+  color: #1976d2;
+  margin: 16px 0 8px 0;
+}
+.ai-markdown ul, .ai-markdown ol {
+  margin: 8px 0 8px 24px;
+}
+.ai-markdown blockquote {
+  border-left: 4px solid #90caf9;
+  background: #f4f8fb;
+  color: #555;
+  margin: 8px 0;
+  padding: 8px 16px;
+}
+.ai-markdown code {
+  background: #f0f0f0;
+  color: #d32f2f;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.ai-markdown pre {
+  background: #f8faff;
+  color: #374151;
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
 }
 </style> 
