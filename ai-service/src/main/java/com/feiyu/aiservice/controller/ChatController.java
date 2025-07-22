@@ -213,9 +213,15 @@ public class ChatController {
         }
 
         // 保存 AI 回复到数据库
-        boolean ok = chatMessageService.addMessage(sessionId, "assistant", aiReply, filtered.toString());
-        if (!ok) {
-            System.err.println("[DEBUG] AI回复保存失败");
+        try {
+            ObjectMapper objectMapper = new ObjectMapper();
+            String referenceJson = objectMapper.writeValueAsString(filtered);
+            boolean ok = chatMessageService.addMessage(sessionId, "assistant", aiReply, referenceJson);
+            if (!ok) {
+                System.err.println("[DEBUG] AI回复保存失败");
+            }
+        } catch (Exception e) {
+            System.err.println("[DEBUG] reference序列化失败: " + e.getMessage());
         }
         return Map.of("success", true, "reply", aiReply, "reference", filtered);
     }

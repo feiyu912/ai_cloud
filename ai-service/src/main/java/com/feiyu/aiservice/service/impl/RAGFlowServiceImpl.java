@@ -54,6 +54,12 @@ public class RAGFlowServiceImpl implements RAGFlowService {
                     Map<String, Object> data = (Map<String, Object>) body.get("data");
                     if (data.containsKey("chunks")) {
                         List<Map<String, Object>> chunks = (List<Map<String, Object>>) data.get("chunks");
+                        // 补充 document_keyword 字段，兼容前端
+                        for (Map<String, Object> chunk : chunks) {
+                            if (chunk.containsKey("document_name") && chunk.get("document_name") != null) {
+                                chunk.put("document_keyword", chunk.get("document_name"));
+                            }
+                        }
                         return chunks;
                     }
                 }

@@ -43,20 +43,31 @@
               <el-button size="small" type="text" @click="msg.referenceCollapsed = !msg.referenceCollapsed" style="margin-left: 8px;">
                 {{ msg.referenceCollapsed ? '展开' : '收起' }}
               </el-button>
-              <div v-show="!msg.referenceCollapsed">
-                <span v-for="(item, ridx) in msg.reference" :key="ridx" class="ref-item">
-                  <span v-if="item.source === 'session'">
-                    <el-tag type="success">对话文件</el-tag>
-                    <b>{{ item.fileName }}</b>
-                    <span v-if="item.segmentNo">(第{{ item.segmentNo }}段)</span>
-                    <span class="ref-session">{{ item.text.slice(0, 30) }}...</span>
-                  </span>
-                  <span v-else>
-                    <el-tag>全局知识</el-tag>
-                    <span class="ref-global">{{ item.text.slice(0, 30) }}...</span>
-                  </span>
-                  <span v-if="ridx < msg.reference.length - 1">，</span>
-                </span>
+              <div v-show="!msg.referenceCollapsed" style="display: flex; flex-wrap: wrap; gap: 12px;">
+                <div
+                  v-for="(item, ridx) in msg.reference"
+                  :key="ridx"
+                  class="ref-item"
+                  style="background: #f8faff; border: 1px solid #dbeafe; border-radius: 8px; padding: 12px 16px; margin-bottom: 0; min-width: 260px; max-width: 100%; box-sizing: border-box; flex: 1 1 320px; position: relative;"
+                >
+                  <div style="font-size: 13px; color: #1976d2; margin-bottom: 4px;">
+                    <span v-if="item.similarity !== undefined">相似度: {{ (item.similarity * 100).toFixed(1) }}%</span>
+                    <span v-if="item.document_keyword || item.document_name || item.file_name" style="margin-left: 12px;">
+                      来源: {{ item.document_keyword || item.document_name || item.file_name }}
+                    </span>
+                    <el-button
+                      size="small"
+                      type="text"
+                      style="position: absolute; top: 8px; right: 8px;"
+                      @click="item.collapsed = !item.collapsed"
+                    >
+                      {{ item.collapsed ? '展开' : '收起' }}
+                    </el-button>
+                  </div>
+                  <div style="font-size: 15px; color: #333; white-space: pre-line;">
+                    {{ item.collapsed ? (item.content ? item.content.slice(0, 50) + (item.content.length > 50 ? '...' : '') : '') : item.content }}
+                  </div>
+                </div>
               </div>
             </div>
           </template>
@@ -211,7 +222,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { ChatLineRound, Upload, UploadFilled, Tools } from '@element-plus/icons-vue'
 import { ElMessage, ElNotification } from 'element-plus'
 import axios from 'axios'
@@ -272,13 +283,22 @@ async function fetchMessages() {
   messages.value = rawMsgs.map(msg => {
     let reference = []
     try {
-      if (msg.reference) reference = JSON.parse(msg.reference)
+      if (msg.reference) {
+        const ref = JSON.parse(msg.reference)
+        reference = Array.isArray(ref) ? ref : [ref]
+        // 为每条参考内容加collapsed属性，默认折叠
+        reference = reference.map(item => ({ ...item, collapsed: true }))
+      }
     } catch (e) {}
     return { ...msg, reference, referenceCollapsed: false }
   })
   
   // 统计使用过的MCP工具
   updateUsedMcpTools()
+  
+  // 调试输出
+  console.log('messages:', messages.value)
+  window._msgs = messages
 }
 
 async function createSession() {
@@ -579,6 +599,18 @@ async function fetchDatasets() {
     selectedDatasetIds.value = data.data.map(ds => ds.id)
   }
 }
+
+watch(messages, (val) => {
+  if (val && val.length) {
+    val.forEach((msg, idx) => {
+      if (msg.reference && msg.reference.length) {
+        msg.reference.forEach((item, ridx) => {
+          console.log('AI参考[' + idx + '-' + ridx + ']:', item);
+        });
+      }
+    });
+  }
+});
 </script>
 
 <style scoped>

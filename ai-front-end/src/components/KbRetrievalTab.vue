@@ -37,6 +37,9 @@
           <span v-if="item.vector_similarity !== undefined">{{ (item.vector_similarity * 100).toFixed(2) }} 向量相似度</span>
         </div>
         <div class="kb-content" v-html="item.highlight || item.content"></div>
+        <div class="kb-source" v-if="item.document_keyword || item.document_name || item.file_name">
+          来源文件：{{ item.document_keyword || item.document_name || item.file_name }}
+        </div>
       </el-card>
     </div>
   </div>
@@ -70,6 +73,14 @@ onMounted(() => {
 watch(() => props.datasetId, () => {
   loadDocuments()
 })
+
+watch(results, (val) => {
+  if (val && val.length) {
+    val.forEach((item, idx) => {
+      console.log('检索结果[' + idx + ']:', item);
+    });
+  }
+});
 
 async function loadDocuments() {
   if (!props.datasetId) return
