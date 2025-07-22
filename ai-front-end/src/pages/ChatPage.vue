@@ -39,13 +39,13 @@
           <!-- 只在有参考内容的AI回复上方显示参考栏 -->
           <template v-if="msg.role === 'assistant' && msg.reference && msg.reference.length">
             <div class="reference-bar" style="margin-bottom: 8px;">
-              <b>本轮AI参考（共{{ msg.reference.length }}条）</b>
+              <b>本轮AI参考（共{{ msg.reference.filter(item => item.similarity === undefined || item.similarity >= 0.4).length }}条）</b>
               <el-button size="small" type="text" @click="msg.referenceCollapsed = !msg.referenceCollapsed" style="margin-left: 8px;">
                 {{ msg.referenceCollapsed ? '展开' : '收起' }}
               </el-button>
               <div v-show="!msg.referenceCollapsed" style="display: flex; flex-wrap: wrap; gap: 12px;">
                 <div
-                  v-for="(item, ridx) in msg.reference"
+                  v-for="(item, ridx) in msg.reference.filter(item => item.similarity === undefined || item.similarity >= 0.4)"
                   :key="ridx"
                   class="ref-item"
                   style="background: #f8faff; border: 1px solid #dbeafe; border-radius: 8px; padding: 12px 16px; margin-bottom: 0; min-width: 260px; max-width: 100%; box-sizing: border-box; flex: 1 1 320px; position: relative;"

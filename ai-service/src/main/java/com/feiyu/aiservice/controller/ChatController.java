@@ -162,9 +162,23 @@ public class ChatController {
                 System.err.println("[DEBUG] RAGFlow检索失败: " + e.getMessage());
             }
         }
-        // 拼接 prompt
+        // 只保留 similarity >= 0.4 的片段用于prompt
+        List<Map<String, Object>> filteredHighSim = filtered.stream()
+            .filter(item -> {
+                Object sim = item.get("similarity");
+                if (sim instanceof Number) {
+                    return ((Number) sim).doubleValue() >= 0.4;
+                }
+                try {
+                    return Double.parseDouble(sim.toString()) >= 0.4;
+                } catch (Exception e) {
+                    return false;
+                }
+            })
+            .collect(java.util.stream.Collectors.toList());
+        // 拼接 prompt 只用高相似度内容
         List<String> contextList = new ArrayList<>();
-        for (Map<String, Object> item : filtered) {
+        for (Map<String, Object> item : filteredHighSim) {
             Object content = item.get("content");
             if (content != null) contextList.add(content.toString());
         }
