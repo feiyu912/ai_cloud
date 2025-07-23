@@ -23,7 +23,7 @@ spring:
       api-key: sk-a75e2109f45e4704b3c14cb25e245186
       chat:
         options:
-          incremental-output: false
+          incremental-output: true
           model: qwen-max-latest
       embedding:
         options:

@@ -13,10 +13,16 @@ import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter;
+import okhttp3.*;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 
 @RestController
 @RequestMapping("/chat")
@@ -238,5 +244,140 @@ public class ChatController {
             System.err.println("[DEBUG] reference序列化失败: " + e.getMessage());
         }
         return Map.of("success", true, "reply", aiReply, "reference", filtered);
+    }
+
+    @PostMapping("/session/{id}/chat/stream")
+    public ResponseBodyEmitter chatWithSessionStream(
+            @RequestHeader("Authorization") String token,
+            @PathVariable("id") Long sessionId,
+            @RequestBody Map<String, Object> body) {
+        // 设置超时时间为5分钟，防止流式响应被提前关闭
+        ResponseBodyEmitter emitter = new ResponseBodyEmitter(300_000L);
+        new Thread(() -> {
+            StringBuilder aiReplyBuilder = new StringBuilder();
+            try {
+                String question = (String) body.get("question");
+                if (question == null || question.trim().isEmpty()) {
+                    emitter.send("data: 问题不能为空\n");
+                    emitter.completeWithError(new Exception("问题不能为空"));
+                    return;
+                }
+                // ====== 检索知识库，拼接prompt ======
+                Object datasetIdsObj = body.get("dataset_ids");
+                List<String> datasetIds = null;
+                if (datasetIdsObj instanceof List<?>) {
+                    datasetIds = (List<String>) datasetIdsObj;
+                }
+                List<Map<String, Object>> filtered = new ArrayList<>();
+                if (datasetIds != null && !datasetIds.isEmpty()) {
+                    try {
+                        List<Map<String, Object>> ragflowResults = ragFlowService.queryKnowledge(question, datasetIds);
+                        filtered.addAll(ragflowResults);
+                    } catch (Exception e) {
+                        emitter.send("data: [RAGFlow检索失败] " + e.getMessage() + "\n");
+                        emitter.completeWithError(e);
+                        return;
+                    }
+                }
+                // 只保留 similarity >= 0.4 的片段用于prompt
+                List<Map<String, Object>> filteredHighSim = filtered.stream()
+                    .filter(item -> {
+                        Object sim = item.get("similarity");
+                        if (sim instanceof Number) {
+                            return ((Number) sim).doubleValue() >= 0.4;
+                        }
+                        try {
+                            return Double.parseDouble(sim.toString()) >= 0.4;
+                        } catch (Exception e) {
+                            return false;
+                        }
+                    })
+                    .collect(java.util.stream.Collectors.toList());
+                // 拼接 prompt 只用高相似度内容
+                List<String> contextList = new ArrayList<>();
+                for (Map<String, Object> item : filteredHighSim) {
+                    Object content = item.get("content");
+                    if (content != null) contextList.add(content.toString());
+                }
+                String context = PromptBuilder.buildContext(contextList, 32000, 2000);
+                String finalPrompt = question + (context.isEmpty() ? "" : "\n\n相关知识：\n" + context);
+
+                // ====== DashScope流式调用 ======
+                String apiKey = "sk-a75e2109f45e4704b3c14cb25e245186"; // 建议从配置读取
+                ObjectMapper objectMapper = new ObjectMapper();
+                String jsonBody = "{\n" +
+                    "  \"model\": \"qwen-max-latest\",\n" +
+                    "  \"input\": {\n" +
+                    "    \"messages\": [\n" +
+                    "      {\"role\": \"user\", \"content\": " + objectMapper.writeValueAsString(finalPrompt) + "}\n" +
+                    "    ]\n" +
+                    "  },\n" +
+                    "  \"parameters\": {\n" +
+                    "    \"incremental_output\": true\n" +
+                    "  }\n" +
+                    "}";
+                OkHttpClient client = new OkHttpClient.Builder()
+                    .connectTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
+                    .writeTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
+                    .build();
+                okhttp3.RequestBody bodyReq = okhttp3.RequestBody.create(
+                    okhttp3.MediaType.parse("application/json"), jsonBody
+                );
+                // 官方流式用法：URL为/generation，Accept: text/event-stream
+                Request request = new Request.Builder()
+                    .url("https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation")
+                    .addHeader("Authorization", "Bearer " + apiKey)
+                    .addHeader("Content-Type", "application/json")
+                    .addHeader("Accept", "text/event-stream")
+                    .post(bodyReq)
+                    .build();
+                Response response = client.newCall(request).execute();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(response.body().byteStream(), StandardCharsets.UTF_8));
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    System.out.println("[DEBUG] 流式原始行: " + line);
+                    // 只处理data:开头的行，其他直接跳过
+                    if (!line.trim().isEmpty() && line.trim().startsWith("data:")) {
+                        String jsonStr = line.trim().substring(5).trim();
+                        try {
+                            JsonNode node = objectMapper.readTree(jsonStr);
+                            String text = node.path("output").path("text").asText();
+                            if (text != null && !text.isEmpty()) {
+                                emitter.send("data: " + objectMapper.writeValueAsString(Map.of("output", Map.of("text", text))) + "\n");
+                                aiReplyBuilder.append(text);
+                                System.out.println("[DEBUG] 当前拼接AI回复: " + aiReplyBuilder.toString());
+                            }
+                        } catch (Exception ex) {
+                            System.err.println("[DEBUG] 解析流式JSON失败: " + ex.getMessage());
+                        }
+                    }
+                }
+                // ====== 流式结束后，保存AI回复和reference到数据库 ======
+                try {
+                    String aiReply = aiReplyBuilder.toString();
+                    String referenceJson = objectMapper.writeValueAsString(filtered);
+                    System.out.println("[DEBUG] 最终拼接AI回复: [" + aiReply + "]");
+                    System.out.println("[DEBUG] reference: [" + referenceJson + "]");
+                    boolean ok = chatMessageService.addMessage(sessionId, "assistant", aiReply, referenceJson);
+                    System.out.println("[DEBUG] 保存AI消息到数据库结果: " + ok);
+                    if (!ok) {
+                        System.err.println("[DEBUG] 流式AI回复保存失败");
+                    }
+                    emitter.send("data: " + objectMapper.writeValueAsString(Map.of(
+                        "reply", aiReply,
+                        "reference", filtered,
+                        "success", ok
+                    )) + "\n");
+                } catch (Exception e) {
+                    System.err.println("[DEBUG] 流式reference序列化失败: " + e.getMessage());
+                }
+                emitter.complete(); // 标记完成
+            } catch (Exception e) {
+                try { emitter.send("data: [ERROR] " + e.getMessage() + "\n"); } catch (Exception ignore) {}
+                emitter.completeWithError(e);
+            }
+        }).start();
+        return emitter;
     }
 }

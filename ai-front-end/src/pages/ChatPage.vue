@@ -40,7 +40,7 @@
           <template v-if="msg.role === 'assistant' && msg.reference && msg.reference.length">
             <div class="reference-bar" style="margin-bottom: 8px;">
               <b>本轮AI参考（共{{ msg.reference.filter(item => item.similarity === undefined || item.similarity >= 0.4).length }}条）</b>
-              <el-button size="small" type="text" @click="msg.referenceCollapsed = !msg.referenceCollapsed" style="margin-left: 8px;">
+              <el-button type="link" @click="msg.referenceCollapsed = !msg.referenceCollapsed" style="margin-left: 8px;">
                 {{ msg.referenceCollapsed ? '展开' : '收起' }}
               </el-button>
               <div v-show="!msg.referenceCollapsed" style="display: flex; flex-wrap: wrap; gap: 12px;">
@@ -57,7 +57,7 @@
                     </span>
                     <el-button
                       size="small"
-                      type="text"
+                      type="link"
                       style="position: absolute; top: 8px; right: 8px;"
                       @click="item.collapsed = !item.collapsed"
                     >
@@ -74,7 +74,7 @@
           <div :class="['msg', msg.role]">
             <div class="msg-bubble">
               <b>{{ msg.role === 'user' ? '我' : 'AI' }}：</b>
-              <span v-if="msg.role === 'assistant'" v-html="renderMarkdown(msg.content)" class="ai-markdown"></span>
+              <div v-if="msg.role === 'assistant'" v-html="renderMarkdown(msg.content)" class="ai-markdown"></div>
               <span v-else>{{ msg.content }}</span>
             </div>
             <!-- MCP工具调用信息显示 -->
@@ -100,7 +100,7 @@
         <div v-if="streaming" class="msg assistant">
           <div class="msg-bubble">
             <b>AI：</b>
-            <span v-html="renderMarkdown(streamingContent)" class="ai-markdown"></span>
+            <div v-html="renderMarkdown(streamingContent)" class="ai-markdown"></div>
           </div>
         </div>
       </div>
@@ -134,6 +134,7 @@
               {{ tool.description }}
             </el-option>
           </el-select>
+          <el-switch v-model="useStream" active-text="流式" inactive-text="非流式" style="margin-left: 16px;" />
         </div>
         <!-- 上传文件对话框 -->
         <el-dialog v-model="showUploadDialog" title="上传文件" width="500px">
@@ -257,6 +258,7 @@ const showUsedToolsDialog = ref(false);
 const usedMcpTools = ref([]);
 const selectedDatasetIds = ref([]) // 多选知识库ID数组
 const datasets = ref([]) // 所有知识库
+const useStream = ref(true) // 默认流式
 
 function formatTime(time) {
   if (!time) return ''
@@ -372,45 +374,91 @@ async function sendMessage() {
       fixedReference = [{ source: 'global', text: '【无检索结果，已兜底，后端返回空数组】' }]
     }
 
-    // 3. 流式请求AI回复
+    // 3. 根据useStream选择流式或非流式
     const requestBody = {
       question: prompt,
       dataset_ids: selectedDatasetIds.value, // 自动传所有知识库ID
       tools: selectedTools.value // 传所选MCP工具名
     }
-    const res = await fetch(`/ai/chat/session/${currentSessionId.value}/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: token
-      },
-      body: JSON.stringify(requestBody)
-    })
-    if (!res.body) throw new Error('无响应流')
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder('utf-8')
-    let done = false
-    let buffer = ''
-    streamingContent.value = ''
-    while (!done) {
-      const { value, done: doneReading } = await reader.read()
-      done = doneReading
-      if (value) {
-        buffer += decoder.decode(value, { stream: true })
-        let lines = buffer.split(/\r?\n/)
-        buffer = lines.pop()
-        for (const line of lines) {
-          if (line.startsWith('data:')) {
-            const data = line.replace('data:', '').trim()
-            if (data) streamingContent.value += data
+    if (useStream.value) {
+      // 流式请求
+      const res = await fetch(`/ai/chat/session/${currentSessionId.value}/chat/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token
+        },
+        body: JSON.stringify(requestBody)
+      })
+      if (!res.body) throw new Error('无响应流')
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder('utf-8')
+      let done = false
+      let buffer = ''
+      streamingContent.value = ''
+      let finalReply = null
+      let finalReference = null
+      while (!done) {
+        const { value, done: doneReading } = await reader.read()
+        done = doneReading
+        if (value) {
+          buffer += decoder.decode(value, { stream: true })
+          let lines = buffer.split(/\r?\n/)
+          buffer = lines.pop()
+          for (const line of lines) {
+            // console.log('SSE原始行:', line);
+            const dataMatch = line.match(/data:(.*)$/)
+            if (dataMatch && dataMatch[1]) {
+              const data = dataMatch[1].trim()
+              // 只处理JSON对象
+              if (data.startsWith('{')) {
+                try {
+                  const obj = JSON.parse(data)
+                  if (obj.output && obj.output.text) {
+                    streamingContent.value += obj.output.text
+                  }
+                  // 收到最终完整内容
+                  if (obj.reply) {
+                    finalReply = obj.reply
+                    finalReference = obj.reference || []
+                  }
+                } catch (e) {
+                  // 忽略解析失败
+                }
+              }
+            }
           }
         }
       }
+      // 流结束后，直接将最终内容push进历史消息，避免内容消失
+      if (finalReply !== null) {
+        messages.value.push({ role: 'assistant', content: finalReply, reference: finalReference })
+      } else if (streamingContent.value) {
+        messages.value.push({ role: 'assistant', content: streamingContent.value, reference: [] })
+      }
+      // 不再依赖fetchMessages刷新，避免流式内容消失
+      streaming.value = false
+      streamingContent.value = ''
+    } else {
+      // 非流式请求
+      const res = await fetch(`/ai/chat/session/${currentSessionId.value}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token
+        },
+        body: JSON.stringify(requestBody)
+      })
+      const data = await res.json()
+      if (data && data.reply) {
+        messages.value.push({ role: 'assistant', content: data.reply, reference: data.reference || [] })
+      } else {
+        ElMessage.error('AI回复失败')
+      }
+      await fetchMessages()
+      streaming.value = false
+      streamingContent.value = ''
     }
-    // 流结束后再刷新历史消息
-    await fetchMessages()
-    streaming.value = false
-    streamingContent.value = ''
   } catch (e) {
     streaming.value = false
     streamingContent.value = ''
@@ -708,7 +756,7 @@ watch(messages, (val) => {
   padding: 24px 24px 100px 24px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 16px; /* 原来16px，减半 */
   background: #f4f6fa;
 }
 
@@ -770,7 +818,7 @@ watch(messages, (val) => {
 
 .msg-bubble {
   max-width: 80%;
-  padding: 14px 18px;
+  padding: 14px 28px; /* 原来14px 18px，减半 */
   border-radius: 16px;
   font-size: 1.08rem;
   line-height: 1.7;
@@ -991,5 +1039,13 @@ watch(messages, (val) => {
   padding: 12px;
   border-radius: 8px;
   overflow-x: auto;
+}
+:deep(.ai-markdown) p,
+:deep(.ai-markdown) ul,
+:deep(.ai-markdown) ol,
+:deep(.ai-markdown) li {
+  margin-top: 2px !important;
+  margin-bottom: 2px !important;
+  line-height: 1.4 !important;
 }
 </style> 

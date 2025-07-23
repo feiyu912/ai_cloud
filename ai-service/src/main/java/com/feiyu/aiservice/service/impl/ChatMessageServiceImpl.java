@@ -36,12 +36,15 @@ public class ChatMessageServiceImpl implements ChatMessageService {
 
     @Override
     public boolean addMessage(Long sessionId, String role, String content, String reference) {
+        System.out.println("[DEBUG] addMessage参数: sessionId=" + sessionId + ", role=" + role + ", content=" + content + ", reference=" + reference);
         ChatMessage msg = new ChatMessage();
         msg.setSessionId(sessionId);
         msg.setRole(role);
         msg.setContent(content);
         msg.setReference(reference);
-        return chatMessageMapper.insert(msg) > 0;
+        boolean ok = chatMessageMapper.insert(msg) > 0;
+        System.out.println("[DEBUG] addMessage插入结果: " + ok);
+        return ok;
     }
 
     @Override

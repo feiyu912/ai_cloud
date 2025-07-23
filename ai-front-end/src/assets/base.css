@@ -50,6 +50,15 @@
   }
 }
 
+.ai-markdown p,
+.ai-markdown ul,
+.ai-markdown ol,
+.ai-markdown li {
+  margin-top: 2px !important;
+  margin-bottom: 2px !important;
+  line-height: 1.4 !important;
+}
+
 *,
 *::before,
 *::after {
