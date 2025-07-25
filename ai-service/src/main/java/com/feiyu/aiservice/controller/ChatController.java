@@ -462,20 +462,50 @@ public class ChatController {
         return emitter;
     }
 
-    // MCP 工具问题类型判断
+    // MCP 工具问题类型判断（扩展同义表达）
+    private static final String[] TIME_KEYWORDS = {
+        "时间", "几点", "当前时间", "现在时间", "what time", "time now", "time is it"
+    };
+    private static final String[] RANDOM_KEYWORDS = {
+        "随机", "随机数", "random", "generate random", "随机生成"
+    };
+    private static final String[] FILESYSTEM_KEYWORDS = {
+        "文件", "目录", "file", "folder", "list files", "文件列表", "当前目录"
+    };
+    private static final String[] UNITCONVERT_KEYWORDS = {
+        "米转英尺", "米换算英尺", "m2ft", "unit convert", "单位换算", "米", "英尺"
+    };
+    private static final String[] MYSQL_KEYWORDS = {
+        "mysql", "数据库", "database", "show databases", "所有数据库", "列出数据库"
+    };
+
     private boolean isTimeQuestion(String question) {
-        return question != null && (question.contains("时间") || question.toLowerCase().contains("time"));
+        return containsAnyKeyword(question, TIME_KEYWORDS);
     }
     private boolean isRandomQuestion(String question) {
-        return question != null && (question.contains("随机") || question.toLowerCase().contains("random"));
+        return containsAnyKeyword(question, RANDOM_KEYWORDS);
     }
     private boolean isFileSystemQuestion(String question) {
-        return question != null && (question.contains("文件") || question.contains("目录") || question.toLowerCase().contains("file"));
+        return containsAnyKeyword(question, FILESYSTEM_KEYWORDS);
     }
     private boolean isUnitConvertQuestion(String question) {
-        return question != null && (question.contains("米") && question.contains("英尺"));
+        // 必须同时包含“米”和“英尺”或其它换算关键词
+        if (question == null) return false;
+        String q = question.toLowerCase();
+        boolean hasMeter = q.contains("米") || q.contains("m");
+        boolean hasFeet = q.contains("英尺") || q.contains("ft");
+        boolean hasOther = containsAnyKeyword(question, UNITCONVERT_KEYWORDS);
+        return (hasMeter && hasFeet) || hasOther;
     }
     private boolean isMysqlQuestion(String question) {
-        return question != null && (question.toLowerCase().contains("mysql") || question.contains("数据库"));
+        return containsAnyKeyword(question, MYSQL_KEYWORDS);
+    }
+    private boolean containsAnyKeyword(String question, String[] keywords) {
+        if (question == null) return false;
+        String q = question.toLowerCase();
+        for (String kw : keywords) {
+            if (q.contains(kw.toLowerCase())) return true;
+        }
+        return false;
     }
 }
