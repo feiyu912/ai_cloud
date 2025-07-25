@@ -19,10 +19,6 @@ import java.util.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter;
-import okhttp3.*;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 
 @RestController
 @RequestMapping("/chat")
@@ -35,7 +31,15 @@ public class ChatController {
     @Autowired
     private ChatModel chatModel;
     @Autowired
-    private TimeTool timeTool;
+    private com.feiyu.aiservice.mcp.impl.TimeTool timeTool;
+    @Autowired
+    private com.feiyu.aiservice.mcp.impl.RandomTool randomTool;
+    @Autowired
+    private com.feiyu.aiservice.mcp.impl.FileSystemTool fileSystemTool;
+    @Autowired
+    private com.feiyu.aiservice.mcp.impl.UnitConvertTool unitConvertTool;
+    @Autowired
+    private com.feiyu.aiservice.mcp.impl.MysqlServiceImpl mysqlService;
     @Autowired
     private MethodToolCallbackProvider mcpToolCallbacks;
     @Autowired
@@ -150,8 +154,31 @@ public class ChatController {
         if (question == null || question.trim().isEmpty()) {
             return Map.of("success", false, "msg", "问题不能为空");
         }
-
-        // ====== 恢复 RAG 检索和拼接 ======
+        // ====== 后端分流：MCP工具问题直接返回 ======
+        if (isTimeQuestion(question)) {
+            String timeResult = timeTool.getCurrentTime();
+            return Map.of("success", true, "reply", "当前时间：" + timeResult, "reference", java.util.List.of());
+        }
+        if (isRandomQuestion(question)) {
+            String rand1 = randomTool.generateRandom(1, 100);
+            String rand2 = randomTool.generateRandom(1, 100);
+            return Map.of("success", true, "reply", "生成的两个随机数为：" + rand1 + ", " + rand2, "reference", java.util.List.of());
+        }
+        if (isFileSystemQuestion(question)) {
+            String fsResult = fileSystemTool.listFiles(".");
+            return Map.of("success", true, "reply", "当前目录文件列表：" + fsResult, "reference", java.util.List.of());
+        }
+        if (isUnitConvertQuestion(question)) {
+            String ucResult = unitConvertTool.convert(1.0, "m2ft");
+            return Map.of("success", true, "reply", "1米约等于：" + ucResult, "reference", java.util.List.of());
+        }
+        if (isMysqlQuestion(question)) {
+            java.util.List<String> dbNames = mysqlService.listAllDatabaseNames();
+            String mysqlResult = String.join(", ", dbNames);
+            return Map.of("success", true, "reply", "MySQL数据库列表：" + mysqlResult, "reference", java.util.List.of());
+        }
+        // ====== 其它问题走原有大模型流程 ======
+        // ====== 检索知识库，拼接prompt ======
         Long userId = UserController.getUserIdByToken(token);
         Object datasetIdsObj = body.get("dataset_ids");
         List<String> datasetIds = null;
@@ -189,6 +216,7 @@ public class ChatController {
             if (content != null) contextList.add(content.toString());
         }
         String context = PromptBuilder.buildContext(contextList, 32000, 2000);
+        // ====== 拼接MCP工具结果到prompt前面 ======
         String finalPrompt = question + (context.isEmpty() ? "" : "\n\n相关知识：\n" + context);
         // 打印 prompt 长度和内容
         System.out.println("[DEBUG] prompt长度: " + finalPrompt.length());
@@ -262,6 +290,60 @@ public class ChatController {
                     emitter.completeWithError(new Exception("问题不能为空"));
                     return;
                 }
+                // ====== 后端分流：MCP工具问题直接返回 ======
+                if (isTimeQuestion(question)) {
+                    String timeResult = timeTool.getCurrentTime();
+                    emitter.send("data: " + new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(java.util.Map.of(
+                        "reply", "当前时间：" + timeResult,
+                        "reference", java.util.List.of(),
+                        "success", true
+                    )) + "\n");
+                    emitter.complete();
+                    return;
+                }
+                if (isRandomQuestion(question)) {
+                    String rand1 = randomTool.generateRandom(1, 100);
+                    String rand2 = randomTool.generateRandom(1, 100);
+                    emitter.send("data: " + new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(java.util.Map.of(
+                        "reply", "生成的两个随机数为：" + rand1 + ", " + rand2,
+                        "reference", java.util.List.of(),
+                        "success", true
+                    )) + "\n");
+                    emitter.complete();
+                    return;
+                }
+                if (isFileSystemQuestion(question)) {
+                    String fsResult = fileSystemTool.listFiles(".");
+                    emitter.send("data: " + new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(java.util.Map.of(
+                        "reply", "当前目录文件列表：" + fsResult,
+                        "reference", java.util.List.of(),
+                        "success", true
+                    )) + "\n");
+                    emitter.complete();
+                    return;
+                }
+                if (isUnitConvertQuestion(question)) {
+                    String ucResult = unitConvertTool.convert(1.0, "m2ft");
+                    emitter.send("data: " + new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(java.util.Map.of(
+                        "reply", "1米约等于：" + ucResult,
+                        "reference", java.util.List.of(),
+                        "success", true
+                    )) + "\n");
+                    emitter.complete();
+                    return;
+                }
+                if (isMysqlQuestion(question)) {
+                    java.util.List<String> dbNames = mysqlService.listAllDatabaseNames();
+                    String mysqlResult = String.join(", ", dbNames);
+                    emitter.send("data: " + new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(java.util.Map.of(
+                        "reply", "MySQL数据库列表：" + mysqlResult,
+                        "reference", java.util.List.of(),
+                        "success", true
+                    )) + "\n");
+                    emitter.complete();
+                    return;
+                }
+                // ====== 其它问题走原有大模型流程 ======
                 // ====== 检索知识库，拼接prompt ======
                 Object datasetIdsObj = body.get("dataset_ids");
                 List<String> datasetIds = null;
@@ -302,9 +384,9 @@ public class ChatController {
                 String context = PromptBuilder.buildContext(contextList, 32000, 2000);
                 String finalPrompt = question + (context.isEmpty() ? "" : "\n\n相关知识：\n" + context);
 
-                // ====== DashScope流式调用 ======
+                // ====== DashScope流式调用（OkHttp） ======
                 String apiKey = "sk-a75e2109f45e4704b3c14cb25e245186"; // 建议从配置读取
-                ObjectMapper objectMapper = new ObjectMapper();
+                com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
                 String jsonBody = "{\n" +
                     "  \"model\": \"qwen-max-latest\",\n" +
                     "  \"input\": {\n" +
@@ -316,7 +398,7 @@ public class ChatController {
                     "    \"incremental_output\": true\n" +
                     "  }\n" +
                     "}";
-                OkHttpClient client = new OkHttpClient.Builder()
+                okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
                     .connectTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
                     .readTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
                     .writeTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
@@ -324,16 +406,15 @@ public class ChatController {
                 okhttp3.RequestBody bodyReq = okhttp3.RequestBody.create(
                     okhttp3.MediaType.parse("application/json"), jsonBody
                 );
-                // 官方流式用法：URL为/generation，Accept: text/event-stream
-                Request request = new Request.Builder()
+                okhttp3.Request request = new okhttp3.Request.Builder()
                     .url("https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation")
                     .addHeader("Authorization", "Bearer " + apiKey)
                     .addHeader("Content-Type", "application/json")
                     .addHeader("Accept", "text/event-stream")
                     .post(bodyReq)
                     .build();
-                Response response = client.newCall(request).execute();
-                BufferedReader reader = new BufferedReader(new InputStreamReader(response.body().byteStream(), StandardCharsets.UTF_8));
+                okhttp3.Response response = client.newCall(request).execute();
+                java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(response.body().byteStream(), java.nio.charset.StandardCharsets.UTF_8));
                 String line;
                 while ((line = reader.readLine()) != null) {
                     System.out.println("[DEBUG] 流式原始行: " + line);
@@ -341,10 +422,10 @@ public class ChatController {
                     if (!line.trim().isEmpty() && line.trim().startsWith("data:")) {
                         String jsonStr = line.trim().substring(5).trim();
                         try {
-                            JsonNode node = objectMapper.readTree(jsonStr);
+                            com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(jsonStr);
                             String text = node.path("output").path("text").asText();
                             if (text != null && !text.isEmpty()) {
-                                emitter.send("data: " + objectMapper.writeValueAsString(Map.of("output", Map.of("text", text))) + "\n");
+                                emitter.send("data: " + objectMapper.writeValueAsString(java.util.Map.of("output", java.util.Map.of("text", text))) + "\n");
                                 aiReplyBuilder.append(text);
                                 System.out.println("[DEBUG] 当前拼接AI回复: " + aiReplyBuilder.toString());
                             }
@@ -364,7 +445,7 @@ public class ChatController {
                     if (!ok) {
                         System.err.println("[DEBUG] 流式AI回复保存失败");
                     }
-                    emitter.send("data: " + objectMapper.writeValueAsString(Map.of(
+                    emitter.send("data: " + objectMapper.writeValueAsString(java.util.Map.of(
                         "reply", aiReply,
                         "reference", filtered,
                         "success", ok
@@ -379,5 +460,22 @@ public class ChatController {
             }
         }).start();
         return emitter;
+    }
+
+    // MCP 工具问题类型判断
+    private boolean isTimeQuestion(String question) {
+        return question != null && (question.contains("时间") || question.toLowerCase().contains("time"));
+    }
+    private boolean isRandomQuestion(String question) {
+        return question != null && (question.contains("随机") || question.toLowerCase().contains("random"));
+    }
+    private boolean isFileSystemQuestion(String question) {
+        return question != null && (question.contains("文件") || question.contains("目录") || question.toLowerCase().contains("file"));
+    }
+    private boolean isUnitConvertQuestion(String question) {
+        return question != null && (question.contains("米") && question.contains("英尺"));
+    }
+    private boolean isMysqlQuestion(String question) {
+        return question != null && (question.toLowerCase().contains("mysql") || question.contains("数据库"));
     }
 }
